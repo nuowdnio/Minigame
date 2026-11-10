@@ -78,7 +78,21 @@ export interface PlaneSpawn {
   pitchDeg: number;
 }
 
+export interface PlaneDamageLimits {
+  /** Bruchlast des Flügels als Lastvielfaches (g). */
+  maxG: number;
+  /** Höchstzulässige Geschwindigkeit (m/s), darüber Flattern. */
+  vne: number;
+  /** Fahrwerk reißt ab (Aufprall m/s). */
+  gearBreak: number;
+  /** Flügel/Leitwerk bricht bei Bodenberührung (m/s). */
+  wingBreak: number;
+  /** Rumpf zerstört (m/s). */
+  bodyBreak: number;
+}
+
 export interface PlaneConfig {
+  damage: PlaneDamageLimits;
   mass: number;
   inertia: Vec3Like;
   surfaces: SurfaceDef[];
@@ -129,6 +143,7 @@ const PLANE_CONTACT: ContactParams = {
 
 export const PLANE_PRESETS = {
   trainer: {
+    damage: { maxG: 6, vne: 32, gearBreak: 3.5, wingBreak: 6, bodyBreak: 13 },
     mass: 1.25,
     inertia: { x: 0.075, y: 0.16, z: 0.095 },
     surfaces: [
@@ -160,23 +175,25 @@ export const PLANE_PRESETS = {
     fuselage: { linearDrag: { x: 0.03, y: 0.03, z: 0.01 }, dragArea: { x: 0.03, y: 0.035, z: 0.008 } },
     motor: {
       ...BASE_MOTOR,
-      kv: 1000, loadFactor: 0.75, maxThrust: 14, torqueToThrust: 0.022,
-      spinUpTau: 0.06, spinDownTau: 0.09, idle: 0, rotorInertia: 4e-5, efficiency: 0.72,
+      kv: 1000, maxThrust: 14, torqueToThrust: 0.022, idle: 0, rotorInertia: 4e-5,
+      windingResistance: 0.06, noLoadCurrent: 1.0, escCurrentLimit: 40,
+      motorHeatCapacity: 50, motorCooling: 0.4, motorCoolingPerKrads: 0.8, motorMaxTemp: 170,
+      escHeatCapacity: 4, escResistance: 0.005, escCooling: 0.4, escMaxTemp: 120,
       propDiameter: 0.254, propPitch: 0.152, zeroThrustSpeedFactor: 1.25, maxInflowGain: 1.1,
       position: { x: 0, y: 0.02, z: -0.52 }, spin: 1, slipstreamFactor: 0.9,
     },
     battery: battery(3, 2200, 0.03, 180),
     contactPoints: [
-      { position: { x: 0.14, y: -0.17, z: 0.05 }, radius: 0.035, wheel: true },
-      { position: { x: -0.14, y: -0.17, z: 0.05 }, radius: 0.035, wheel: true },
-      { position: { x: 0, y: -0.17, z: -0.42 }, radius: 0.03, wheel: true, steerable: true },
-      { position: { x: 0.7, y: 0.12, z: 0 }, radius: 0.03 },
-      { position: { x: -0.7, y: 0.12, z: 0 }, radius: 0.03 },
-      { position: { x: 0, y: -0.02, z: 0.86 }, radius: 0.03 },
-      { position: { x: 0, y: 0.23, z: 0.84 }, radius: 0.03 },
-      { position: { x: 0, y: 0.02, z: -0.56 }, radius: 0.045 },
-      { position: { x: 0, y: -0.05, z: 0.3 }, radius: 0.03 },
-      { position: { x: 0, y: 0.12, z: -0.1 }, radius: 0.04 },
+      { position: { x: 0.14, y: -0.17, z: 0.05 }, radius: 0.035, wheel: true, part: 'gear' },
+      { position: { x: -0.14, y: -0.17, z: 0.05 }, radius: 0.035, wheel: true, part: 'gear' },
+      { position: { x: 0, y: -0.17, z: -0.42 }, radius: 0.03, wheel: true, steerable: true, part: 'gear' },
+      { position: { x: 0.7, y: 0.12, z: 0 }, radius: 0.03, part: 'wingR' },
+      { position: { x: -0.7, y: 0.12, z: 0 }, radius: 0.03, part: 'wingL' },
+      { position: { x: 0, y: -0.02, z: 0.86 }, radius: 0.03, part: 'stab' },
+      { position: { x: 0, y: 0.23, z: 0.84 }, radius: 0.03, part: 'fin' },
+      { position: { x: 0, y: 0.02, z: -0.56 }, radius: 0.045, part: 'prop' },
+      { position: { x: 0, y: -0.05, z: 0.3 }, radius: 0.03, part: 'body' },
+      { position: { x: 0, y: 0.12, z: -0.1 }, radius: 0.04, part: 'body' },
     ],
     contact: PLANE_CONTACT,
     steerMaxDeg: 25,
@@ -195,6 +212,7 @@ export const PLANE_PRESETS = {
   },
 
   wing: {
+    damage: { maxG: 10, vne: 45, gearBreak: 99, wingBreak: 8, bodyBreak: 16 },
     mass: 0.95,
     inertia: { x: 0.022, y: 0.05, z: 0.03 },
     surfaces: [
@@ -222,20 +240,22 @@ export const PLANE_PRESETS = {
     fuselage: { linearDrag: { x: 0.02, y: 0.02, z: 0.006 }, dragArea: { x: 0.012, y: 0.02, z: 0.006 } },
     motor: {
       ...BASE_MOTOR,
-      kv: 2300, loadFactor: 0.75, maxThrust: 13, torqueToThrust: 0.012,
-      spinUpTau: 0.03, spinDownTau: 0.045, idle: 0, rotorInertia: 6e-6, efficiency: 0.72,
+      kv: 2300, maxThrust: 13, torqueToThrust: 0.012, idle: 0, rotorInertia: 6e-6,
+      windingResistance: 0.05, noLoadCurrent: 1.2, escCurrentLimit: 50,
+      motorHeatCapacity: 25, motorCooling: 0.3, motorCoolingPerKrads: 0.4, motorMaxTemp: 170,
+      escHeatCapacity: 3, escResistance: 0.005, escCooling: 0.4, escMaxTemp: 120,
       propDiameter: 0.152, propPitch: 0.102, zeroThrustSpeedFactor: 1.3, maxInflowGain: 1.1,
       position: { x: 0, y: 0, z: 0.2 }, spin: 1, slipstreamFactor: 0,
     },
     battery: battery(4, 1800, 0.035, 190),
     contactPoints: [
-      { position: { x: 0, y: -0.035, z: -0.15 }, radius: 0.025 },
-      { position: { x: 0, y: -0.035, z: 0.1 }, radius: 0.025 },
-      { position: { x: 0.5, y: 0, z: 0.12 }, radius: 0.025 },
-      { position: { x: -0.5, y: 0, z: 0.12 }, radius: 0.025 },
-      { position: { x: 0, y: 0.03, z: 0.22 }, radius: 0.04 },
-      { position: { x: 0, y: 0, z: -0.24 }, radius: 0.03 },
-      { position: { x: 0, y: 0.05, z: -0.05 }, radius: 0.03 },
+      { position: { x: 0, y: -0.035, z: -0.15 }, radius: 0.025, part: 'body' },
+      { position: { x: 0, y: -0.035, z: 0.1 }, radius: 0.025, part: 'body' },
+      { position: { x: 0.5, y: 0, z: 0.12 }, radius: 0.025, part: 'wingR' },
+      { position: { x: -0.5, y: 0, z: 0.12 }, radius: 0.025, part: 'wingL' },
+      { position: { x: 0, y: 0.03, z: 0.22 }, radius: 0.04, part: 'prop' },
+      { position: { x: 0, y: 0, z: -0.24 }, radius: 0.03, part: 'body' },
+      { position: { x: 0, y: 0.05, z: -0.05 }, radius: 0.03, part: 'body' },
     ],
     contact: PLANE_CONTACT,
     steerMaxDeg: 0,
@@ -254,6 +274,7 @@ export const PLANE_PRESETS = {
   },
 
   glider: {
+    damage: { maxG: 5, vne: 30, gearBreak: 99, wingBreak: 5, bodyBreak: 12 },
     mass: 0.95,
     inertia: { x: 0.06, y: 0.33, z: 0.28 },
     surfaces: [
@@ -284,21 +305,23 @@ export const PLANE_PRESETS = {
     fuselage: { linearDrag: { x: 0.02, y: 0.02, z: 0.004 }, dragArea: { x: 0.02, y: 0.02, z: 0.004 } },
     motor: {
       ...BASE_MOTOR,
-      kv: 1100, loadFactor: 0.75, maxThrust: 9, torqueToThrust: 0.02,
-      spinUpTau: 0.06, spinDownTau: 0.08, idle: 0, rotorInertia: 2.5e-5, efficiency: 0.72,
+      kv: 1100, maxThrust: 9, torqueToThrust: 0.02, idle: 0, rotorInertia: 2.5e-5,
+      windingResistance: 0.07, noLoadCurrent: 0.8, escCurrentLimit: 30,
+      motorHeatCapacity: 35, motorCooling: 0.35, motorCoolingPerKrads: 0.7, motorMaxTemp: 170,
+      escHeatCapacity: 3, escResistance: 0.006, escCooling: 0.35, escMaxTemp: 120,
       propDiameter: 0.229, propPitch: 0.152, zeroThrustSpeedFactor: 1.25, maxInflowGain: 1.1,
       position: { x: 0, y: 0.0, z: -0.48 }, spin: 1, slipstreamFactor: 0.9,
     },
     battery: battery(3, 1300, 0.04, 110),
     contactPoints: [
-      { position: { x: 0, y: -0.04, z: -0.3 }, radius: 0.025 },
-      { position: { x: 0, y: -0.035, z: 0.2 }, radius: 0.025 },
-      { position: { x: 1.0, y: 0.15, z: 0 }, radius: 0.025 },
-      { position: { x: -1.0, y: 0.15, z: 0 }, radius: 0.025 },
-      { position: { x: 0, y: 0.0, z: 1.0 }, radius: 0.025 },
-      { position: { x: 0, y: 0.2, z: 1.0 }, radius: 0.025 },
-      { position: { x: 0, y: 0, z: -0.5 }, radius: 0.035 },
-      { position: { x: 0, y: 0.08, z: 0 }, radius: 0.03 },
+      { position: { x: 0, y: -0.04, z: -0.3 }, radius: 0.025, part: 'body' },
+      { position: { x: 0, y: -0.035, z: 0.2 }, radius: 0.025, part: 'body' },
+      { position: { x: 1.0, y: 0.15, z: 0 }, radius: 0.025, part: 'wingR' },
+      { position: { x: -1.0, y: 0.15, z: 0 }, radius: 0.025, part: 'wingL' },
+      { position: { x: 0, y: 0.0, z: 1.0 }, radius: 0.025, part: 'stab' },
+      { position: { x: 0, y: 0.2, z: 1.0 }, radius: 0.025, part: 'fin' },
+      { position: { x: 0, y: 0, z: -0.5 }, radius: 0.035, part: 'prop' },
+      { position: { x: 0, y: 0.08, z: 0 }, radius: 0.03, part: 'body' },
     ],
     contact: PLANE_CONTACT,
     steerMaxDeg: 0,

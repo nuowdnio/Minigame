@@ -13,6 +13,8 @@ import { Osd } from './ui/osd';
 import { SettingsMenu } from './ui/settingsMenu';
 import { TelemetryPanel } from './ui/telemetryPanel';
 import { buildTestArena } from './world/testArena';
+import { buildTown } from './world/town';
+import { DebrisSystem, SmokeSystem } from './render/effects';
 
 let settings: Settings = loadSettings();
 // Tablets: beim ersten Start mittlere Grafikqualität (Akku/Wärme)
@@ -36,11 +38,11 @@ function applyGraphics(): void {
 applyGraphics();
 
 const scene = new THREE.Scene();
-const arena = buildTestArena(scene, true);
-const camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.02, 3000);
+const arena = settings.world === 'testfield' ? buildTestArena(scene, true) : buildTown(scene, true);
+const camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.08, 5000);
 
 // --- Simulation -------------------------------------------------------------
-const env = new WorldEnvironment(arena.collision, settings.environment, arena.collision.boxes);
+const env = new WorldEnvironment(arena.collision, settings.environment, arena.collision.windObstacles());
 const sim = new Simulation(env, settings);
 let view: VehicleView = createVehicleView(sim.vehicle);
 scene.add(view.root);
@@ -48,15 +50,31 @@ scene.add(view.root);
 function spawnPoint(): THREE.Vector3 {
   return sim.vehicle.kind === 'plane' ? arena.spawns.plane : arena.spawns.quad;
 }
-sim.reset(spawnPoint(), 0);
+function spawnYaw(): number {
+  return sim.vehicle.kind === 'plane' ? arena.spawns.planeYaw : arena.spawns.quadYaw;
+}
+sim.reset(spawnPoint(), spawnYaw());
+
+// Trümmer und Rauch
+const debris = new DebrisSystem(scene, arena.collision);
+const smoke = new SmokeSystem(scene);
+const smokeSources: THREE.Vector3[] = [];
+const windHere = new THREE.Vector3();
+
+/** Modell neu aufbauen (nach Reset sind abgebrochene Teile wieder dran). */
+function rebuildView(): void {
+  scene.remove(view.root);
+  view = createVehicleView(sim.vehicle);
+  scene.add(view.root);
+  debris.clear();
+  smoke.clear();
+}
 
 /** Fluggerät wechseln: Physik und Modell neu aufbauen. */
 function switchVehicle(id: string): void {
   sim.setVehicle(id, settings);
-  scene.remove(view.root);
-  view = createVehicleView(sim.vehicle);
-  scene.add(view.root);
-  sim.reset(spawnPoint(), 0);
+  rebuildView();
+  sim.reset(spawnPoint(), spawnYaw());
   chaseRig.reset();
   input.resetKeyboardThrottle();
 }
@@ -73,6 +91,7 @@ const socks = arena.windsocks.map((p) => {
 const input = new InputManager(settings);
 const fpvRig = new FpvCameraRig();
 const chaseRig = new ChaseCameraRig();
+chaseRig.world = arena.collision;
 
 // --- UI ---------------------------------------------------------------------
 const ui = document.getElementById('ui')!;
@@ -93,8 +112,13 @@ const menu = new SettingsMenu(
   settings,
   (s) => {
     const vehicleChanged = s.vehicle !== settings.vehicle;
+    const worldChanged = s.world !== settings.world;
     settings = s;
     saveSettings(settings);
+    if (worldChanged) {
+      location.reload();
+      return;
+    }
     env.update(settings.environment);
     if (vehicleChanged) switchVehicle(settings.vehicle);
     sim.applySettings(settings);
@@ -115,7 +139,8 @@ function closeMenu(): void {
 }
 
 function resetDrone(): void {
-  sim.reset(spawnPoint(), 0);
+  sim.reset(spawnPoint(), spawnYaw());
+  rebuildView();
   chaseRig.reset();
   input.resetKeyboardThrottle();
 }
@@ -192,6 +217,16 @@ function frame(now: number): void {
   view.root.position.copy(renderPos);
   view.root.quaternion.copy(renderQuat);
   view.update(vehicle, paused ? 0 : dt);
+  view.root.updateMatrixWorld(true);
+
+  // Schäden: abgebrochene Teile werden zu Trümmern, Meldungen ins OSD
+  for (const part of view.takeDetached(vehicle)) debris.add(part, vehicle.body.velocity, 2.5);
+  for (const ev of vehicle.damage.takeEvents()) osd.message(ev.text, ev.severity);
+  if (!paused) {
+    debris.update(dt);
+    env.wind(renderPos, sim.time, windHere);
+    smoke.update(dt, view.smokeSources(vehicle, smokeSources), windHere, Math.max(0.6, vehicle.size * 2));
+  }
 
   updateCameraProjection();
   if (settings.camera.view === 'fpv') {

@@ -15,6 +15,9 @@ export class PlaneMesh {
   private readonly prop = new THREE.Group();
   private readonly disc: THREE.Mesh;
   private propAngle = 0;
+  private readonly surfaceGroups = new Map<string, THREE.Group>();
+  private readonly gearGroups = new Map<number, THREE.Group>();
+  readonly motorPosition: THREE.Vector3;
 
   constructor(cfg: PlaneConfig) {
     const v = cfg.visual;
@@ -84,6 +87,7 @@ export class PlaneMesh {
         this.hingeVertical.push(true);
       }
       this.root.add(group);
+      this.surfaceGroups.set(s.name, group);
     });
 
     // Propeller
@@ -111,20 +115,38 @@ export class PlaneMesh {
     this.root.add(this.disc);
 
     // Fahrwerk
-    for (const c of cfg.contactPoints) {
-      if (!c.wheel) continue;
+    cfg.contactPoints.forEach((c, i) => {
+      if (!c.wheel) return;
+      const g = new THREE.Group();
       const wheel = new THREE.Mesh(new THREE.CylinderGeometry(c.radius, c.radius, 0.015, 16), dark);
       wheel.rotation.z = Math.PI / 2;
       wheel.position.set(c.position.x, c.position.y, c.position.z);
-      this.root.add(wheel);
+      g.add(wheel);
       const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, Math.abs(c.position.y), 6), dark);
       strut.position.set(c.position.x, c.position.y / 2, c.position.z);
-      this.root.add(strut);
-    }
+      g.add(strut);
+      this.root.add(g);
+      this.gearGroups.set(i, g);
+    });
+    this.motorPosition = new THREE.Vector3(m.position.x, m.position.y, m.position.z);
 
     this.root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) o.castShadow = true;
     });
+  }
+
+  /** Teil abtrennen: Flächenname, 'prop' oder 'gear<i>'. */
+  detach(part: string): THREE.Object3D[] {
+    if (part === 'prop') {
+      this.disc.visible = false;
+      return [this.prop];
+    }
+    if (part.startsWith('gear')) {
+      const g = this.gearGroups.get(Number(part.slice(4)));
+      return g ? [g] : [];
+    }
+    const g = this.surfaceGroups.get(part);
+    return g ? [g] : [];
   }
 
   /**

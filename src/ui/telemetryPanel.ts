@@ -51,6 +51,8 @@ export class TelemetryPanel {
         `Motoren %  ${q.motors.map((m) => ((m.omega / q.omegaRef) * 100).toFixed(0).padStart(3)).join(' ')}`,
         `Motoren rpm ${q.motors.map((m) => Math.round((m.omega * 60) / (2 * Math.PI) / 100) * 100).join(' ')}`,
         `Schub ${t.totalThrust.toFixed(2)} N  (T/W ${(t.totalThrust / (q.body.mass * 9.81)).toFixed(2)})  Propwash ${(t.propwash * 100).toFixed(0)}%`,
+        `Motorstrom A ${q.motors.map((m) => m.motorCurrent.toFixed(0).padStart(4)).join(' ')}`,
+        `Motor °C    ${q.motors.map((m) => m.motorTemp.toFixed(0).padStart(4)).join(' ')}   Regler °C ${q.motors.map((m) => m.escTemp.toFixed(0)).join(' ')}`,
       );
     } else if (v instanceof PlaneVehicle) {
       const p = v.plane;
@@ -64,9 +66,12 @@ export class TelemetryPanel {
           .filter((s) => s.def.control)
           .map((s) => `${s.def.name} ${(s.deflection * R2D).toFixed(0)}°`)
           .join('  ')}`,
-        `Motor ${Math.round((p.motor.omega * 60) / (2 * Math.PI))} rpm  Steigen ${vel.y.toFixed(1)} m/s`,
+        `Motor ${Math.round((p.motor.omega * 60) / (2 * Math.PI))} rpm  ${p.motor.motorCurrent.toFixed(0)} A  ${p.motor.motorTemp.toFixed(0)} °C  Steigen ${vel.y.toFixed(1)} m/s`,
+        `Last ${pt.loadFactor.toFixed(1)} g  (Bruch bei ${v.config.damage.maxG} g, V_NE ${(v.config.damage.vne * 3.6).toFixed(0)} km/h)`,
       );
     }
+    const parts = [...v.damage.parts].map(([k, h]) => `${k} ${Math.round(h * 100)}%`).join('  ');
+    if (parts) lines.push(`Zustand: ${parts}`);
     lines.push(
       `Akku ${t.voltage.toFixed(2)} V  OCV ${bat.openCircuitVoltage().toFixed(2)} V  ${t.current.toFixed(1)} A  SoC ${(bat.soc * 100).toFixed(0)}%  ${bat.temperatureC.toFixed(1)} °C`,
       `Luft ρ ${t.airDensity.toFixed(3)} kg/m³  ${t.airTemperatureC.toFixed(1)} °C  Wind ${t.windSpeed.toFixed(1)} m/s`,

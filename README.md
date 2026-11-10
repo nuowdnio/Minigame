@@ -49,6 +49,36 @@ Auf Touch-Geräten siehe oben „Auf dem iPad spielen“.
 
 Scharfschalten: Gas ganz nach unten. RC-Sender (EdgeTX/OpenTX als USB-Joystick) werden mit AETR-Zuordnung erkannt.
 
+## Welt: Kleinstadt „Flugdorf“ mit Flugplatz
+
+Prozedural modelliert, ohne externe Dateien:
+
+- **Zentrum:** Marktplatz mit Kirche (Turmuhr, Spitzhelm), Rathaus, Brunnen und Café; Bürohochhaus mit
+  Glasfassade, Wohn- und Geschäftshäuser mit Läden im Erdgeschoss, Park mit Teich und Pavillon
+- **Wohngebiete:** Einfamilienhäuser mit Satteldach, Schornstein und Garten, Autos in Einfahrten und am Straßenrand,
+  Alleebäume, Straßenlaternen
+- **Außen:** Sportplatz mit Toren, Flutlicht und Tribüne, Gewerbegebiet mit Wasserturm, Tankstelle, Ortsschild
+- **Flugplatz:** Piste 18/36 (600 m) mit Schwellen, Kennungen und Befeuerung, Rollweg, Vorfeld,
+  drei Bogenhangars, Tower, Vereinsheim, abgestellte Flugzeuge, Tankwagen, Windsäcke
+
+Alles ist kollidierbar (gedrehte Quader, Satteldächer, Zylinder, Kugeln, Bogenhallen) und wirft Windschatten.
+Die Geometrie wird pro Material zu wenigen Meshes zusammengefasst, Bäume sind instanziert – läuft auch auf dem iPad.
+Das alte Testgelände ist im Menü weiterhin wählbar. Drohnen starten auf dem Marktplatz, Flugzeuge auf der Piste.
+
+## Schäden
+
+| Ursache | Drohne | Flugzeug |
+|---|---|---|
+| Aufprall | Propeller bekommt Macken → Unwucht/Vibrationen, bricht; Arm bricht ab; Rahmen zerstört | Fahrwerk reißt ab, Flügel/Leitwerk brechen, Propeller zerbricht, Rumpf zerstört |
+| Propeller berührt etwas bei laufendem Motor | Blätter splittern, Rotor blockiert | Propeller zerbricht |
+| Strukturlast | – | Lastvielfaches über Bruchgrenze (z. B. 6 g Trainer) → Flügel bricht |
+| Überschreiten von V_NE | – | Flattern schaukelt sich auf → Ruder klemmt, später Flügelbruch |
+| Elektrische Überlast | Blockierter Rotor/zu hoher Strom → Regler oder Motorwicklung brennt durch (Rauch) | ebenso |
+| Akku | Überhitzung → aufgebläht (mehr Sag), > 95 °C Brand; Tiefentladung schädigt Zellen | ebenso |
+
+Abgebrochene Teile fliegen als Trümmer weiter, durchgebrannte Motoren rauchen. Meldungen erscheinen im OSD,
+der Zustand aller Bauteile steht in der Telemetrie. Schadensmodell im Menü: Realistisch / Robust / Aus.
+
 ## Fluggeräte
 
 Auswahl im Menü (⚙ / Esc → Fluggerät). Jedes Gerät hat eigene Physikwerte und eigenes Regler-Tuning.
@@ -74,8 +104,13 @@ Sticks → Betaflight-Rates → Raten-PID (P, I mit I-Term-Relax, D auf Messung,
        → Starrkörper (Masse, Trägheitstensor, Kreiselterm) + Aerodynamik + Kontakte
 ```
 
-- Motoren: Drehzahl folgt Ansteuerung × Akkuspannung × KV mit Zeitkonstante; Reaktionsmoment aus
-  Propeller-Drehmoment und Rotorträgheit; Ducts erhöhen den Schub.
+- **Elektromechanisches Motormodell:** Strom aus Tastgrad · Akkuspannung und Gegen-EMK (K_e aus KV),
+  Wicklungswiderstand, Leerlaufstrom, Rotorträgheit → Hochlaufzeit, aktives Bremsen, Drehzahleinbruch bei Sag,
+  Entlastung des Propellers bei Fahrt ergeben sich von selbst. Regler mit Strombegrenzung, Motor- und
+  Reglertemperatur. Akku und Motoren sind implizit gekoppelt (kein Aufschaukeln bei schwachen Akkus).
+- Reaktionsmoment aus Propeller-Drehmoment und Rotorbeschleunigung; Ducts erhöhen den Schub.
+- **Translational Lift:** Vorwärtsfahrt erhöht den Luftdurchsatz der Propeller.
+- **Flugmodi:** Acro, Horizon, Angle (Betaflight-artige Selbststabilisierung).
 - Propeller: Schubverlust bei axialer Anströmung, Rotationsanteil ω × r, Rotor-Widerstand ("H-Force").
 - **Propwash/Wirbelringstadium:** Sinken in die eigene Abströmung → Schubverlust + unruhiger Schub je Motor.
 - Bodeneffekt (Cheeseman–Bennett), Luftwiderstand linear + quadratisch je Körperachse.
@@ -88,6 +123,7 @@ Sticks → Betaflight-Rates → Raten-PID (P, I mit I-Term-Relax, D auf Messung,
 - Flügel-Abwind am Leitwerk, **Propellerstrahl** über dem Leitwerk, V-Form, Pfeilung, Reflex
 - Propeller: Inflow, Reaktionsmoment (Rollen nach links), Kreiselmoment
 - Fahrwerk mit Roll-/Seitenreibung und Bugradlenkung, Kufen bei Handstart-Modellen
+- **Bodeneffekt der Tragfläche** (weniger induzierter Widerstand dicht über der Piste)
 - Daraus ergeben sich Stabilität, Phugoide, Trudeln, Startstrecke und Gleitzahl ohne Sonderregeln.
 
 **Umwelt**
@@ -125,8 +161,8 @@ src/
   env/      atmosphere, wind, noise, environment
   vehicles/ Vehicle-Schnittstelle, QuadVehicle, PlaneVehicle, Registry
   input/    Gamepad, RC-Sender, Tastatur
-  render/   Drohnen-/Flugzeugmodelle, Kameras, Windsack, Windpartikel
-  world/    Kollision, Testwelt
+  render/   Drohnen-/Flugzeugmodelle, Kameras, Windsack, Windpartikel, Trümmer, Rauch
+  world/    Kollisionswelt (Raster, Prismen, Zylinder, Kugeln), Stadt, Testgelände, Texturen
   game/     Simulation (fester Zeittakt), Speicher
   ui/       OSD, Einstellungsmenü, Telemetrie
 tests/      physics/, fc/
@@ -135,7 +171,7 @@ tests/      physics/, fc/
 ## Meilensteine
 
 1. ✅ Flugphysik + Acro in leerer Welt
-2. Angle/Horizon (Drohne), ✅ Propwash, Crash-/Schadensmodell, Rapier-Kollisionen, RC-Kalibrierung & Kanal-Zuordnung
+2. ✅ Angle/Horizon (Drohne), ✅ Propwash, ✅ Crash-/Schadensmodell, Rapier-Kollisionen, RC-Kalibrierung & Kanal-Zuordnung
 3. Gates, Checkpoints, 3 Runden, Timer, Bestzeiten
 4. Level 1 (Trainingshalle), Medaillen, Freischalten
 5. ✅ Wind, Luftdichte, Thermik (Wetter-Optik und analoger Videolook folgen)

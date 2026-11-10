@@ -77,10 +77,27 @@ export class SettingsMenu {
             </optgroup>
           </select></label>
           <p class="hint" data-desc>${vehicleInfo(s.vehicle).description}</p>
+          <label>Flugmodus Drohne <select data-k="flightMode">
+            <option value="acro" ${s.flightMode === 'acro' ? 'selected' : ''}>Acro (keine Selbststabilisierung)</option>
+            <option value="horizon" ${s.flightMode === 'horizon' ? 'selected' : ''}>Horizon (stabilisiert, Flips möglich)</option>
+            <option value="angle" ${s.flightMode === 'angle' ? 'selected' : ''}>Angle (richtet sich selbst auf)</option>
+          </select></label>
           <label>Flugmodus Flugzeug <select data-k="planeMode">
             <option value="manual" ${s.planeMode === 'manual' ? 'selected' : ''}>Manuell (direkt auf die Ruder)</option>
             <option value="gyro" ${s.planeMode === 'gyro' ? 'selected' : ''}>Stabilisiert (Kreisel dämpft)</option>
             <option value="angle" ${s.planeMode === 'angle' ? 'selected' : ''}>Angle (richtet sich selbst auf)</option>
+          </select></label>
+        </section>
+        <section>
+          <h2>Welt & Schäden</h2>
+          <label>Welt <select data-k="world">
+            <option value="town" ${s.world === 'town' ? 'selected' : ''}>Kleinstadt mit Flugplatz</option>
+            <option value="testfield" ${s.world === 'testfield' ? 'selected' : ''}>Testgelände</option>
+          </select></label>
+          <label>Schadensmodell <select data-k="damage">
+            <option value="realistic" ${s.damage === 'realistic' ? 'selected' : ''}>Realistisch</option>
+            <option value="robust" ${s.damage === 'robust' ? 'selected' : ''}>Robust (hält mehr aus)</option>
+            <option value="off" ${s.damage === 'off' ? 'selected' : ''}>Aus (unzerstörbar)</option>
           </select></label>
         </section>
         <section>

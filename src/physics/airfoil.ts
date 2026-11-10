@@ -51,7 +51,15 @@ export function stallBlend(alpha: number, alphaStall: number, sharpness: number)
  * Beiwerte bei Anstellwinkel α (rad) und Klappenwinkel δ (rad, + = Hinterkante nach unten).
  * @param tau Klappenwirksamkeit (0 = keine Klappe)
  */
-export function airfoilCoefficients(alpha: number, delta: number, tau: number, p: AirfoilParams, out?: AirfoilResult): AirfoilResult {
+export function airfoilCoefficients(
+  alpha: number,
+  delta: number,
+  tau: number,
+  p: AirfoilParams,
+  out?: AirfoilResult,
+  /** Faktor für den induzierten Widerstand (Bodeneffekt < 1). */
+  inducedFactor = 1,
+): AirfoilResult {
   const o = out ?? { cl: 0, cd: 0, stall: 0 };
   const alphaEff = alpha + tau * delta;
   const sigma = stallBlend(alphaEff, p.alphaStall, p.stallSharpness);
@@ -59,8 +67,8 @@ export function airfoilCoefficients(alpha: number, delta: number, tau: number, p
   const s = Math.sin(alpha);
   const c = Math.cos(alpha);
   const clPlate = 2 * Math.sign(alpha) * s * s * c;
-  o.cl = (1 - sigma) * clLin + sigma * clPlate;
-  const cdInduced = (clLin * clLin) / (Math.PI * p.oswald * p.aspectRatio);
+  o.cl = ((1 - sigma) * clLin + sigma * clPlate) * (1 + 0.1 * (1 - inducedFactor));
+  const cdInduced = ((clLin * clLin) / (Math.PI * p.oswald * p.aspectRatio)) * inducedFactor;
   const cdFlap = 0.35 * tau * delta * delta;
   o.cd = p.cd0 + cdFlap + (1 - sigma) * cdInduced + sigma * 1.3 * s * s;
   o.stall = sigma;

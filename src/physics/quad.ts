@@ -5,7 +5,7 @@ import type { AirState } from '../env/atmosphere';
 import { dragForce, groundEffectFactor, inflowFactor } from './aero';
 import { Battery } from './battery';
 import { buildContactPoints, solveContacts, type ContactPoint } from './contacts';
-import { Motor, targetOmega } from './motor';
+import { Motor, fullThrottleOmega, solveBusVoltage, torqueInflowGain } from './motor';
 import { RigidBody } from './rigidbody';
 
 const _v = new Vector3();
@@ -16,6 +16,7 @@ const _rWorld = new Vector3();
 const _fBody = new Vector3();
 const _fWorld = new Vector3();
 const _drag = new Vector3();
+const _propContact = { normal: new Vector3(), depth: 0 };
 
 /** Telemetrie eines Physik-Schritts (für OSD/Debug). */
 export interface QuadTelemetry {
@@ -34,6 +35,12 @@ export interface QuadTelemetry {
   windSpeed: number;
   /** Propwash-Intensität 0..1 (Sinkflug in die eigene Abströmung). */
   propwash: number;
+  /** Propellerscheibe berührt ein Hindernis (je Motor). */
+  propStrike?: boolean[];
+  /** Kontaktinformationen je Kontaktpunkt (vom Kontaktlöser). */
+  pointImpact?: number[];
+  pointSlide?: number[];
+  pointTouching?: boolean[];
 }
 
 export function createTelemetry(): QuadTelemetry {
@@ -80,6 +87,7 @@ export class Quad {
   readonly battery: Battery;
   readonly motorPositions: Vector3[];
   readonly contactPoints: ContactPoint[];
+  /** Drehzahl bei Vollgas und Nennlast (rad/s), Bezug für Anzeigen. */
   readonly omegaRef: number;
   readonly telemetry: QuadTelemetry = createTelemetry();
   private readonly air: AirState = { temperatureK: 288, pressurePa: 101325, density: 1.225 };
@@ -93,8 +101,11 @@ export class Quad {
     const fullVoltage = config.battery.ocvCurve[config.battery.ocvCurve.length - 1][1] * config.battery.cells;
     this.motors = f.motors.map(() => new Motor(config.motor, fullVoltage));
     this.motorPositions = f.motors.map((m) => new Vector3(m.position.x, m.position.y, m.position.z));
-    this.contactPoints = buildContactPoints(f.contactPoints);
-    this.omegaRef = targetOmega(1, fullVoltage, config.motor);
+    // Die ersten Kontaktpunkte liegen an den Motoren (gleiche Reihenfolge) -> Propellerschläge
+    this.contactPoints = buildContactPoints(
+      f.contactPoints.map((c, i) => ({ ...c, part: c.part ?? (i < f.motors.length ? `motor${i}` : 'body') })),
+    );
+    this.omegaRef = fullThrottleOmega(config.motor, fullVoltage);
     this.washNoise = f.motors.map(() => 0);
     this.telemetry.voltage = this.battery.terminalVoltage();
   }
@@ -105,7 +116,8 @@ export class Quad {
     b.velocity.set(0, 0, 0);
     b.angularVelocity.set(0, 0, 0);
     b.orientation.setFromAxisAngle(_v.set(0, 1, 0), yaw);
-    for (const m of this.motors) m.reset();
+    for (const m of this.motors) m.reset(ambientC);
+    for (const c of this.contactPoints) c.broken = c.removed = false;
     this.battery.reset(ambientC);
     this.washNoise.fill(0);
     this.telemetry.impactSpeed = 0;
@@ -122,19 +134,19 @@ export class Quad {
     const bat = this.battery;
     b.clearAccumulators();
 
-    // --- Motoren ---------------------------------------------------------
-    const voltage = bat.terminalVoltage();
-    for (let i = 0; i < this.motors.length; i++) {
-      this.motors[i].update(commands[i] ?? 0, voltage, dt);
-    }
+    // --- Akkuspannung unter Last (implizit gekoppelt) -----------------------
+    const voltage = solveBusVoltage(bat.sourceVoltage(), bat.resistance(), bat.params.idleCurrent, this.motors, commands);
 
     // --- Luft ------------------------------------------------------------
     const air = env.air(b.position.y, this.air);
     const rho = air.density;
+    const ambientC = air.temperatureK - 273.15;
     const densityRatio = rho / cfg.air.seaLevelDensity;
     env.wind(b.position, time, _wind);
     _v.copy(b.velocity).sub(_wind);
     b.worldToBody(_v, _vAirBody);
+    const airspeed = _vAirBody.length();
+    const edgeSpeed2 = _vAirBody.x * _vAirBody.x + _vAirBody.z * _vAirBody.z;
 
     // Lage: Anteil der Körper-Hochachse, der nach oben zeigt (für Bodeneffekt)
     const upY = _v2.set(0, 1, 0).applyQuaternion(b.orientation).y;
@@ -157,21 +169,30 @@ export class Quad {
 
       // Axiale Anströmung am Propeller inkl. Rotationsanteil (ω × r).y
       const vAxial = _vAirBody.y + (w.z * r.x - w.x * r.z);
-      let gain = inflowFactor(
+      const inflow = inflowFactor(
         vAxial,
         m.omega,
         cfg.motor.propPitch * cfg.motor.zeroThrustSpeedFactor,
         cfg.motor.maxInflowGain,
       );
+      const tqGain = torqueInflowGain(inflow);
+      let gain = inflow;
+
+      // Induzierte Geschwindigkeit (Strahltheorie) für Propwash und Translational Lift
+      const tRef = Math.max(0.02 * cfg.motor.maxThrust, m.staticThrust);
+      const vInduced = Math.sqrt(tRef / (2 * rho * discArea));
 
       // Propwash: Sinken in die eigene Abströmung -> Schubverlust + unruhiger Schub
-      const tHover = Math.max(0.02, m.staticThrust);
-      const vInduced = Math.sqrt(tHover / (2 * rho * discArea));
-      const descentRatio = -vAxial / vInduced;
-      const wash = propwashIntensity(descentRatio) * Math.min(1, m.omega / (0.15 * this.omegaRef));
+      const wash = propwashIntensity(-vAxial / vInduced) * Math.min(1, m.omega / (0.15 * this.omegaRef));
       this.washNoise[i] += (gaussian() - this.washNoise[i]) * washK;
       gain *= 1 - cfg.aero.propwash.thrustLoss * wash + cfg.aero.propwash.noise * wash * this.washNoise[i];
       if (wash > washMax) washMax = wash;
+
+      // Translational Lift: seitliche Anströmung erhöht den Luftdurchsatz der Propellerscheibe
+      gain *= 1 + cfg.motor.translationalLift * (edgeSpeed2 / (edgeSpeed2 + 4 * vInduced * vInduced));
+
+      // Unwucht eines beschädigten Propellers: unruhiger Schub
+      if (m.imbalance > 0) gain *= 1 + m.imbalance * 0.3 * gaussian() * Math.min(1, m.omega / this.omegaRef);
 
       if (cfg.aero.groundEffect.enabled && upY > 0.3) {
         _rWorld.copy(r).applyQuaternion(b.orientation).add(b.position);
@@ -180,17 +201,18 @@ export class Quad {
         gain *= 1 + (ge - 1) * upY;
       }
 
-      m.computeForces(densityRatio, gain * duct);
+      m.update(commands[i] ?? 0, voltage, dt, densityRatio, tqGain, ambientC, airspeed);
+      m.computeForces(densityRatio, gain * duct, tqGain);
       totalThrust += m.thrust;
       rotorSpeedSum += m.omega / this.omegaRef;
 
       // Schub entlang Körper-Hochachse am Motorort: τ = r × (0, T, 0)
       b.torque.x += -r.z * m.thrust;
       b.torque.z += r.x * m.thrust;
-      // Reaktionsmoment von Propeller-Luftwiderstand und Rotor-Beschleunigung
+      // Reaktionsmoment = Antriebsmoment (Luftmoment + Beschleunigung des Rotors)
       yawTorque += spin * (m.torque + cfg.motor.rotorInertia * m.omegaDot);
 
-      loadCurrent += m.current(voltage);
+      loadCurrent += m.batteryCurrent;
     }
     b.torque.y += yawTorque;
 
@@ -215,8 +237,7 @@ export class Quad {
     b.force.y -= b.mass * cfg.gravity;
 
     // --- Akku ------------------------------------------------------------
-    const airspeed = _vAirBody.length();
-    bat.step(loadCurrent, dt, air.temperatureK - 273.15, airspeed);
+    bat.step(loadCurrent, dt, ambientC, airspeed);
 
     // --- Integration + Kontakte -----------------------------------------
     b.integrateVelocity(dt);
@@ -224,8 +245,26 @@ export class Quad {
     solveContacts(b, this.contactPoints, env.collision, cfg.contact, t);
     b.integratePosition(dt);
 
+    // Propellerscheiben: Randpunkte gegen die Welt prüfen. Berührt ein Blatt etwas, wird der
+    // Rotor stark abgebremst (blockiert) und der Propeller nutzt sich ab (Schadensmodell).
+    if (!t.propStrike) t.propStrike = this.motors.map(() => false);
+    const R = cfg.motor.propDiameter / 2;
+    const hubY = 0.02 * (cfg.motor.propDiameter / 0.127);
+    for (let i = 0; i < this.motors.length; i++) {
+      const mp = this.motorPositions[i];
+      let strike = false;
+      for (let k = 0; k < 4 && !strike; k++) {
+        const ox = k === 0 ? R : k === 1 ? -R : 0;
+        const oz = k === 2 ? R : k === 3 ? -R : 0;
+        _rWorld.set(mp.x + ox, mp.y + hubY, mp.z + oz).applyQuaternion(b.orientation).add(b.position);
+        if (env.collision.sphereContact(_rWorld, 0.004, _propContact)) strike = true;
+      }
+      t.propStrike[i] = strike;
+      this.motors[i].obstruction = strike ? 40 * cfg.motor.rotorInertia : 0;
+    }
+
     t.airDensity = rho;
-    t.airTemperatureC = air.temperatureK - 273.15;
+    t.airTemperatureC = ambientC;
     t.totalThrust = totalThrust;
     t.current = bat.current;
     t.voltage = bat.terminalVoltage();

@@ -6,7 +6,7 @@ import { dragForce, inflowFactor } from './aero';
 import { airfoilCoefficients, flapEffectiveness, liftSlope, type AirfoilParams, type AirfoilResult } from './airfoil';
 import { Battery } from './battery';
 import { buildContactPoints, solveContacts, type ContactPoint } from './contacts';
-import { Motor } from './motor';
+import { Motor, solveBusVoltage, torqueInflowGain } from './motor';
 import { createTelemetry, type QuadTelemetry } from './quad';
 import { RigidBody } from './rigidbody';
 
@@ -31,6 +31,12 @@ interface Surface {
   stall: number;
   /** Aktueller Ruderausschlag (rad). */
   deflection: number;
+  /** Zustand 1 = intakt, 0 = abgebrochen. */
+  health: number;
+  /** Ruder klemmt (Flattern/Servoschaden). */
+  jammed: boolean;
+  /** Luftkraft-Last der Fläche im letzten Schritt (N). */
+  load: number;
 }
 
 export interface PlaneTelemetry extends QuadTelemetry {
@@ -42,6 +48,8 @@ export interface PlaneTelemetry extends QuadTelemetry {
   stall: number;
   /** Auftrieb gesamt (N). */
   lift: number;
+  /** Lastvielfaches n = Auftrieb / Gewicht. */
+  loadFactor: number;
 }
 
 const FWD = new Vector3(0, 0, -1);
@@ -77,16 +85,20 @@ export class Plane {
     betaDeg: 0,
     stall: 0,
     lift: 0,
+    loadFactor: 1,
   };
   private readonly air: AirState = { temperatureK: 288, pressurePa: 101325, density: 1.225 };
   /** Lenkwinkel Bugrad (rad, + = rechts). */
   steerAngle = 0;
+  private readonly cmdBuf = [0];
+  private motorList: Motor[] = [];
 
   constructor(readonly config: PlaneConfig) {
     this.body = new RigidBody(config.mass, config.inertia);
     this.battery = new Battery(config.battery);
     const fullV = config.battery.ocvCurve[config.battery.ocvCurve.length - 1][1] * config.battery.cells;
     this.motor = new Motor(config.motor, fullV);
+    this.motorList = [this.motor];
     this.motorPosition = new Vector3(config.motor.position.x, config.motor.position.y, config.motor.position.z);
     this.contactPoints = buildContactPoints(config.contactPoints);
     const names = config.surfaces.map((s) => s.name);
@@ -118,6 +130,9 @@ export class Plane {
         cl: 0,
         stall: 0,
         deflection: 0,
+        health: 1,
+        jammed: false,
+        load: 0,
       };
     });
     this.telemetry.voltage = this.battery.terminalVoltage();
@@ -130,12 +145,15 @@ export class Plane {
     b.orientation.multiply(new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), pitchDeg * DEG));
     b.velocity.copy(FWD).applyQuaternion(b.orientation).multiplyScalar(speed);
     b.angularVelocity.set(0, 0, 0);
-    this.motor.reset();
+    this.motor.reset(ambientC);
     this.battery.reset(ambientC);
     for (const s of this.surfaces) {
       s.deflection = 0;
-      s.alpha = s.cl = s.stall = 0;
+      s.alpha = s.cl = s.stall = s.load = 0;
+      s.health = 1;
+      s.jammed = false;
     }
+    for (const c of this.contactPoints) c.broken = c.removed = false;
     this.steerAngle = 0;
     this.telemetry.voltage = this.battery.terminalVoltage();
   }
@@ -152,13 +170,12 @@ export class Plane {
     const t = this.telemetry;
     b.clearAccumulators();
 
-    // --- Motor -----------------------------------------------------------
-    const voltage = bat.terminalVoltage();
     const m = this.motor;
-    m.update(throttle, voltage, dt);
-
+    this.cmdBuf[0] = throttle;
+    const voltage = solveBusVoltage(bat.sourceVoltage(), bat.resistance(), bat.params.idleCurrent, this.motorList, this.cmdBuf);
     const air = env.air(b.position.y, this.air);
     const rho = air.density;
+    const ambientC = air.temperatureK - 273.15;
     const densityRatio = rho / cfg.air.seaLevelDensity;
 
     env.wind(b.position, time, _w);
@@ -174,7 +191,9 @@ export class Plane {
     // Propeller: Inflow entlang der Schubachse (vorwärts = −z)
     const vAxial = -uCgZ;
     const gain = inflowFactor(vAxial, m.omega, cfg.motor.propPitch * cfg.motor.zeroThrustSpeedFactor, cfg.motor.maxInflowGain);
-    m.computeForces(densityRatio, gain);
+    const tqGain = torqueInflowGain(gain);
+    m.update(throttle, voltage, dt, densityRatio, tqGain, ambientC, airspeed);
+    m.computeForces(densityRatio, gain, tqGain);
     const thrust = m.thrust;
     // Propellerstrahl (Strahltheorie): Zusatzgeschwindigkeit hinter dem Propeller
     const discArea = Math.PI * (cfg.motor.propDiameter / 2) ** 2;
@@ -210,6 +229,10 @@ export class Plane {
     for (let i = 0; i < this.surfaces.length; i++) {
       const s = this.surfaces[i];
       const def = s.def;
+      if (s.health <= 0) {
+        s.cl = s.load = 0;
+        continue;
+      }
       // Wind am Ort der Fläche (Turbulenz-Gradienten über die Spannweite)
       if (Math.abs(s.position.x) > 0.2 || Math.abs(s.position.z) > 0.4) {
         _pw.copy(s.position).applyQuaternion(b.orientation).add(b.position);
@@ -240,12 +263,23 @@ export class Plane {
         ar /= s.downwashIdx.length;
         alpha -= (2 * clw) / (Math.PI * ar);
       }
-      airfoilCoefficients(alpha, s.deflection, s.tau, s.airfoil, _coef);
+      // Bodeneffekt des Flügels: weniger induzierter Widerstand, etwas mehr Auftrieb (Wieselsberger)
+      let induced = 1;
+      if (def.orientation === 'horizontal' && def.name.startsWith('wing')) {
+        _pw.copy(s.position).applyQuaternion(b.orientation).add(b.position);
+        const h = env.collision.heightAbove(_pw, 50);
+        const x = (16 * h) / (2 * def.span);
+        induced = (x * x) / (1 + x * x);
+      }
+      airfoilCoefficients(alpha, s.deflection, s.tau, s.airfoil, _coef, induced);
+      _coef.cl *= s.health;
+      _coef.cd *= s.health;
       s.alpha = alpha;
       s.cl = _coef.cl;
       s.stall = _coef.stall;
 
       const q = 0.5 * rho * V2 * s.area;
+      s.load = q * _coef.cl;
       // Widerstand entgegen der Anströmung, Auftrieb senkrecht dazu
       _drag.copy(_u).multiplyScalar(-(q * _coef.cd) / V);
       _lift.crossVectors(s.spanDir, _u).multiplyScalar((q * _coef.cl) / V);
@@ -280,7 +314,7 @@ export class Plane {
     b.force.y -= b.mass * cfg.gravity;
 
     // --- Akku ------------------------------------------------------------
-    bat.step(m.current(voltage), dt, air.temperatureK - 273.15, airspeed);
+    bat.step(m.batteryCurrent, dt, ambientC, airspeed);
 
     // --- Integration + Kontakte -----------------------------------------
     b.integrateVelocity(dt);
@@ -299,5 +333,6 @@ export class Plane {
     t.betaDeg = airspeed > 0.5 ? Math.asin(Math.max(-1, Math.min(1, uCgX / airspeed))) / DEG : 0;
     t.stall = wingCount ? wingStall / wingCount : 0;
     t.lift = liftSum;
+    t.loadFactor = liftSum / (b.mass * cfg.gravity);
   }
 }

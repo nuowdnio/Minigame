@@ -54,6 +54,10 @@ export class WindField {
   private readonly thermals: Thermal[] = [];
   readonly direction = new Vector3();
   private readonly cross = new Vector3();
+  /** Raster der Lee-Zonen: Zelle -> Indizes der Hindernisse, deren Windschatten die Zelle berührt. */
+  private wakeGrid = new Map<number, number[]>();
+  private gridDir = NaN;
+  private static readonly CELL = 25;
 
   constructor(
     public params: WindParams,
@@ -94,11 +98,41 @@ export class WindField {
     return logWindProfile(Math.max(height, 0), this.params.speed, this.params.roughness);
   }
 
+  /** Raster der Lee-Zonen für die aktuelle Windrichtung aufbauen. */
+  private buildWakeGrid(): void {
+    this.gridDir = this.params.directionDeg;
+    this.wakeGrid.clear();
+    const d = this.direction;
+    const C = WindField.CELL;
+    this.obstacles.forEach((b, i) => {
+      const h = b.max.y - this.groundY;
+      const len = 10 * h;
+      // Hülle aus Hindernis und seiner Lee-Zone (inkl. Aufweitung)
+      const minX = Math.min(b.min.x, b.min.x + d.x * len) - 0.15 * len - 2;
+      const maxX = Math.max(b.max.x, b.max.x + d.x * len) + 0.15 * len + 2;
+      const minZ = Math.min(b.min.z, b.min.z + d.z * len) - 0.15 * len - 2;
+      const maxZ = Math.max(b.max.z, b.max.z + d.z * len) + 0.15 * len + 2;
+      for (let ix = Math.floor(minX / C); ix <= Math.floor(maxX / C); ix++) {
+        for (let iz = Math.floor(minZ / C); iz <= Math.floor(maxZ / C); iz++) {
+          const k = (ix + 4096) * 8192 + (iz + 4096);
+          let list = this.wakeGrid.get(k);
+          if (!list) this.wakeGrid.set(k, (list = []));
+          list.push(i);
+        }
+      }
+    });
+  }
+
   /** Windschatten-Faktor 0..1 (1 = voll im Lee eines Hindernisses). */
   shelter(p: Vector3): number {
     const d = this.direction;
+    if (this.gridDir !== this.params.directionDeg) this.buildWakeGrid();
+    const C = WindField.CELL;
+    const list = this.wakeGrid.get((Math.floor(p.x / C) + 4096) * 8192 + (Math.floor(p.z / C) + 4096));
+    if (!list) return 0;
     let best = 0;
-    for (const b of this.obstacles) {
+    for (const idx of list) {
+      const b = this.obstacles[idx];
       const h = b.max.y - this.groundY;
       if (p.y > b.max.y + 0.5 * h || h < 0.5) continue;
       const cx = (b.min.x + b.max.x) / 2;

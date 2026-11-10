@@ -86,3 +86,10 @@ body.is-touch .telemetry { top: 22%; }
 
 .menu .hint { margin: 2px 0 6px; font-size: 12px; color: #9fb3c8; }
 .menu optgroup { background: #0b1017; }
+
+/* OSD-Meldungen (Schäden) */
+.osd-msgs { top: 22%; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.osd-msg { font-size: 0.75em; padding: 2px 10px; background: rgba(0,0,0,0.35); border-radius: 4px; transition: opacity 1s; white-space: nowrap; }
+.osd-msg.warn { color: #ffd54f; }
+.osd-msg.critical { color: #ff5252; font-size: 0.9em; }
+.osd-msg.fade { opacity: 0; }

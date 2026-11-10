@@ -37,6 +37,10 @@ export interface Settings {
   /** Flugmodus für Flugzeuge: manuell, stabilisiert (Gyro) oder lagestabilisiert (Angle). */
   planeMode: PlaneMode;
   environment: EnvironmentSettings;
+  /** Schadensmodell: aus, realistisch oder robust (höhere Bruchgrenzen). */
+  damage: 'off' | 'realistic' | 'robust';
+  /** Spielwelt. */
+  world: 'town' | 'testfield';
   camera: {
     /** Kamerawinkel nach oben (Uptilt) in Grad, 0 – 50. */
     angle: number;
@@ -71,6 +75,8 @@ export const DEFAULT_SETTINGS: Settings = {
   flightMode: 'acro',
   planeMode: 'gyro',
   environment: { ...DEFAULT_ENVIRONMENT },
+  damage: 'realistic',
+  world: 'town',
   camera: {
     angle: 25,
     fov: 120,

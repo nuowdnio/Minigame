@@ -41,6 +41,10 @@ export const FLIGHT_CONTROLLER = {
   itermRelaxCutoff: 15,
   /** Gier-Begrenzung im Mixer (Anteil, wie yaw_motors_limit). */
   yawMotorsLimit: 1.0,
+  /** Angle-Modus: maximaler Neigungswinkel (Grad), Rückstellstärke (deg/s pro Grad), max. Drehrate. */
+  angleLimit: 55,
+  angleStrength: 5,
+  angleMaxRate: 400,
   /** Gas unterhalb dessen nach einem Reset automatisch scharf geschaltet wird. */
   armThrottleThreshold: 0.05,
 };

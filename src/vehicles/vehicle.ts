@@ -5,6 +5,7 @@ import type { Sticks } from '../fc/flightController';
 import type { Battery } from '../physics/battery';
 import type { QuadTelemetry } from '../physics/quad';
 import type { RigidBody } from '../physics/rigidbody';
+import type { DamageState } from './damage';
 
 export type VehicleKind = 'quad' | 'plane';
 
@@ -22,6 +23,8 @@ export interface Vehicle {
   readonly cameraMount: Vector3;
   /** Größe für die Verfolgerkamera (m). */
   readonly size: number;
+  /** Schadenszustand und Ereignisse. */
+  readonly damage: DamageState;
   /** Optionaler Hinweis fürs OSD (z. B. Handstart). */
   readonly statusHint?: string;
   /** Auf Startposition setzen. */

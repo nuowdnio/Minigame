@@ -12,6 +12,12 @@ export class DroneMesh {
   private readonly blurDiscs: THREE.Mesh[] = [];
   private readonly angles: number[];
   private readonly spins: number[];
+  /** Gruppe je Motor (Arm, Motor, Propeller, Duct) – kann abbrechen. */
+  private readonly motorGroups: THREE.Group[] = [];
+  private battery!: THREE.Mesh;
+  private camBlock!: THREE.Mesh;
+  /** Motorpositionen (Körper) für Rauch. */
+  readonly motorPositions: THREE.Vector3[] = [];
 
   constructor(preset: QuadPreset) {
     const motors = preset.physics.frame.motors;
@@ -42,8 +48,8 @@ export class DroneMesh {
       st.position.set(x * s, 0.015 * s, z * s);
       this.root.add(st);
     }
-    box(0.035, 0.03, 0.075, new THREE.MeshStandardMaterial({ color: vis.batteryColor, roughness: 0.6 }), 0, 0.048, 0.008);
-    box(0.02, 0.02, 0.02, carbon, 0, 0.015, -0.055);
+    this.battery = box(0.035, 0.03, 0.075, new THREE.MeshStandardMaterial({ color: vis.batteryColor, roughness: 0.6 }), 0, 0.048, 0.008);
+    this.camBlock = box(0.02, 0.02, 0.02, carbon, 0, 0.015, -0.055);
     const lens = new THREE.Mesh(
       new THREE.CylinderGeometry(0.006 * s, 0.007 * s, 0.008 * s, 12),
       new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.9 }),
@@ -60,14 +66,18 @@ export class DroneMesh {
 
     for (const m of motors) {
       const p = new THREE.Vector3(m.position.x, m.position.y, m.position.z);
+      this.motorPositions.push(p.clone().setY(0.01 * s));
+      const mg = new THREE.Group();
+      this.root.add(mg);
+      this.motorGroups.push(mg);
       const len = Math.hypot(p.x, p.z);
       const armMesh = new THREE.Mesh(new THREE.BoxGeometry(0.014 * s, 0.005 * s, len), carbon);
       armMesh.position.set(p.x / 2, 0, p.z / 2);
       armMesh.rotation.y = Math.atan2(p.x, p.z);
-      this.root.add(armMesh);
+      mg.add(armMesh);
       const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.012 * s, 0.012 * s, 0.016 * s, 16), metal);
       bell.position.set(p.x, 0.01 * s, p.z);
-      this.root.add(bell);
+      mg.add(bell);
 
       const propGroup = new THREE.Group();
       propGroup.position.set(p.x, 0.021 * s, p.z);
@@ -82,26 +92,43 @@ export class DroneMesh {
         blade.rotation.y = a;
         propGroup.add(blade);
       }
-      this.root.add(propGroup);
+      mg.add(propGroup);
       this.props.push(propGroup);
       const disc = new THREE.Mesh(
         discGeom,
         new THREE.MeshBasicMaterial({ color: propColor, transparent: true, opacity: 0, depthWrite: false }),
       );
       disc.position.copy(propGroup.position);
-      this.root.add(disc);
+      mg.add(disc);
       this.blurDiscs.push(disc);
 
       if (vis.ducts) {
         const duct = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.08, r * 1.08, r * 0.55, 32, 1, true), ductMat);
         duct.position.set(p.x, 0.021 * s, p.z);
-        this.root.add(duct);
+        mg.add(duct);
       }
     }
 
     this.root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) o.castShadow = true;
     });
+  }
+
+  /**
+   * Teil abtrennen (für Trümmer): 'prop0'..'prop3', 'arm0'..'arm3', 'frame'.
+   * Gibt die abgetrennten Objekte zurück (noch im Modell eingehängt, Weltlage gültig).
+   */
+  detach(part: string): THREE.Object3D[] {
+    const idx = Number(part.slice(-1));
+    if (part.startsWith('prop') && this.props[idx]) {
+      this.blurDiscs[idx].visible = false;
+      const prop = this.props[idx];
+      this.props[idx] = new THREE.Group(); // Platzhalter, dreht ins Leere
+      return [prop];
+    }
+    if (part.startsWith('arm') && this.motorGroups[idx]) return [this.motorGroups[idx]];
+    if (part === 'frame') return [this.battery, this.camBlock];
+    return [];
   }
 
   /** Propeller-Animation aktualisieren (Drehzahlen in rad/s). */

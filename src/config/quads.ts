@@ -20,6 +20,17 @@ export interface QuadPreset {
   };
   /** FPV-Kamera-Montage im Körper-System (m). */
   cameraMount: { x: number; y: number; z: number };
+  /** Bruchgrenzen (Aufprallgeschwindigkeit in m/s). */
+  damage: {
+    /** Propeller bekommt Macken. */
+    propChip: number;
+    /** Propeller bricht. */
+    propBreak: number;
+    /** Arm bricht (Motor fällt ab). */
+    armBreak: number;
+    /** Rahmen/Elektronik zerstört. */
+    frameBreak: number;
+  };
 }
 
 /** Quad-X-Motorlayout ("Props in") für den gegebenen Achsabstand je Achse. */
@@ -77,18 +88,26 @@ export const QUAD_PRESETS = {
       c.frame.contactPoints = contacts(0.0233, 0.0233, 0.012, 0.018);
       Object.assign(c.motor, {
         kv: 19000,
-        loadFactor: 0.68,
         maxThrust: 0.3,
         torqueToThrust: 0.007,
-        spinUpTau: 0.012,
-        spinDownTau: 0.02,
         idle: 0.06,
-        rotorInertia: 1.5e-8,
-        efficiency: 0.55,
+        rotorInertia: 2.5e-8,
+        windingResistance: 0.45,
+        noLoadCurrent: 0.12,
+        escCurrentLimit: 5,
+        motorHeatCapacity: 1,
+        motorCooling: 0.02,
+        motorCoolingPerKrads: 0.03,
+        motorMaxTemp: 160,
+        escHeatCapacity: 0.3,
+        escResistance: 0.02,
+        escCooling: 0.03,
+        escMaxTemp: 120,
         propDiameter: 0.031,
         propPitch: 0.019,
         zeroThrustSpeedFactor: 1.4,
         ductGain: 1.12,
+        translationalLift: 0.05,
       });
       Object.assign(c.battery, {
         cells: 1,
@@ -117,6 +136,7 @@ export const QUAD_PRESETS = {
     },
     visual: { ducts: true, frameColor: 0xe8e8e8, propColorFront: 0xff3a6e, propColorRear: 0x222222, batteryColor: 0xd4b106, size: 0.08 },
     cameraMount: { x: 0, y: 0.012, z: -0.018 },
+    damage: { propChip: 6, propBreak: 12, armBreak: 40, frameBreak: 60 },
   },
 
   cinewhoop: {
@@ -127,16 +147,24 @@ export const QUAD_PRESETS = {
       c.frame.contactPoints = contacts(0.05, 0.05, 0.03, 0.03);
       Object.assign(c.motor, {
         kv: 3800,
-        loadFactor: 0.7,
         maxThrust: 4.6,
         torqueToThrust: 0.011,
-        spinUpTau: 0.016,
-        spinDownTau: 0.026,
         rotorInertia: 1.2e-6,
-        efficiency: 0.65,
+        windingResistance: 0.11,
+        noLoadCurrent: 0.6,
+        escCurrentLimit: 35,
+        motorHeatCapacity: 10,
+        motorCooling: 0.15,
+        motorCoolingPerKrads: 0.12,
+        motorMaxTemp: 170,
+        escHeatCapacity: 2,
+        escResistance: 0.008,
+        escCooling: 0.25,
+        escMaxTemp: 130,
         propDiameter: 0.076,
         propPitch: 0.064,
         ductGain: 1.15,
+        translationalLift: 0.06,
       });
       Object.assign(c.battery, {
         cells: 4,
@@ -162,6 +190,7 @@ export const QUAD_PRESETS = {
     },
     visual: { ducts: true, frameColor: 0x26292e, propColorFront: 0xffffff, propColorRear: 0x888888, batteryColor: 0x2a62c9, size: 0.18 },
     cameraMount: { x: 0, y: 0.03, z: -0.045 },
+    damage: { propChip: 5, propBreak: 9, armBreak: 15, frameBreak: 24 },
   },
 
   freestyle5: {
@@ -173,6 +202,7 @@ export const QUAD_PRESETS = {
     },
     visual: { ducts: false, frameColor: 0x1b1b1d, propColorFront: 0xff7a2a, propColorRear: 0x22c1ff, batteryColor: 0x2a62c9, size: 0.25 },
     cameraMount: { x: 0, y: 0.02, z: -0.06 },
+    damage: { propChip: 2.5, propBreak: 6, armBreak: 11, frameBreak: 18 },
   },
 
   race5: {
@@ -184,8 +214,8 @@ export const QUAD_PRESETS = {
       Object.assign(c.motor, {
         kv: 1960,
         maxThrust: 13.2,
-        spinUpTau: 0.015,
-        spinDownTau: 0.022,
+        rotorInertia: 4.5e-6,
+        windingResistance: 0.065,
         propPitch: 0.094,
         zeroThrustSpeedFactor: 1.45,
       });
@@ -202,6 +232,7 @@ export const QUAD_PRESETS = {
     },
     visual: { ducts: false, frameColor: 0x111111, propColorFront: 0x39ff14, propColorRear: 0x39ff14, batteryColor: 0xc92a2a, size: 0.24 },
     cameraMount: { x: 0, y: 0.018, z: -0.065 },
+    damage: { propChip: 2.5, propBreak: 5.5, armBreak: 10, frameBreak: 16 },
   },
 
   longrange7: {
@@ -212,17 +243,21 @@ export const QUAD_PRESETS = {
       c.frame.contactPoints = contacts(0.111, 0.111, 0.022, 0.05);
       Object.assign(c.motor, {
         kv: 1300,
-        loadFactor: 0.74,
         maxThrust: 19,
         torqueToThrust: 0.019,
-        spinUpTau: 0.032,
-        spinDownTau: 0.05,
         idle: 0.05,
-        rotorInertia: 2.2e-5,
-        efficiency: 0.75,
+        rotorInertia: 2.6e-5,
+        windingResistance: 0.06,
+        noLoadCurrent: 1.0,
+        escCurrentLimit: 45,
+        motorHeatCapacity: 40,
+        motorCooling: 0.4,
+        motorCoolingPerKrads: 0.5,
+        escHeatCapacity: 3,
         propDiameter: 0.178,
         propPitch: 0.089,
         zeroThrustSpeedFactor: 1.35,
+        translationalLift: 0.14,
       });
       Object.assign(c.battery, {
         cells: 6,
@@ -250,6 +285,7 @@ export const QUAD_PRESETS = {
     },
     visual: { ducts: false, frameColor: 0x2b2f38, propColorFront: 0xff2a2a, propColorRear: 0x444444, batteryColor: 0x3aa64a, size: 0.35 },
     cameraMount: { x: 0, y: 0.03, z: -0.08 },
+    damage: { propChip: 2.2, propBreak: 5, armBreak: 9, frameBreak: 15 },
   },
 } satisfies Record<string, QuadPreset>;
 

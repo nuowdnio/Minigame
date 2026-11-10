@@ -54,6 +54,8 @@ export class Battery {
   usedMah = 0;
   /** Zelltemperatur (°C). */
   temperatureC = 25;
+  /** Bleibende Schädigung (Faktor auf den Innenwiderstand, 1 = neu). */
+  damageFactor = 1;
 
   constructor(readonly params: BatteryParams) {
     this.soc = params.startSoc;
@@ -65,16 +67,22 @@ export class Battery {
     this.current = 0;
     this.usedMah = 0;
     this.temperatureC = ambientC;
+    this.damageFactor = 1;
   }
 
   /** Aktueller ohmscher Innenwiderstand (Ω), temperaturabhängig. */
   resistance(): number {
-    return this.params.internalResistance * resistanceTemperatureFactor(this.temperatureC);
+    return this.params.internalResistance * resistanceTemperatureFactor(this.temperatureC) * this.damageFactor;
   }
 
   /** Leerlaufspannung des gesamten Packs (V). */
   openCircuitVoltage(): number {
     return cellOpenCircuitVoltage(this.soc, this.params.ocvCurve) * this.params.cells;
+  }
+
+  /** Quellspannung: Leerlaufspannung minus Polarisation (V). */
+  sourceVoltage(): number {
+    return Math.max(0, this.openCircuitVoltage() - this.polarizationVoltage);
   }
 
   /** Klemmenspannung bei gegebenem Laststrom (V). */

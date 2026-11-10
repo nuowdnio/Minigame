@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { SimpleCollisionWorld } from './collision';
+import { StaticWorld } from './collision';
+import type { Arena } from './world';
+export type { Arena };
 
 /** Deterministischer Zufallsgenerator (Mulberry32). */
 export function rng(seed: number): () => number {
@@ -51,23 +53,13 @@ function groundTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-export interface Arena {
-  collision: SimpleCollisionWorld;
-  /** Startpunkte: Drohnen auf dem Startplatz, Flugzeuge am Pistenanfang (Blick nach −z). */
-  spawns: { quad: THREE.Vector3; plane: THREE.Vector3 };
-  /** Standorte der Windsäcke. */
-  windsocks: THREE.Vector3[];
-  sun: THREE.DirectionalLight;
-  /** Richtung zur Sonne (normiert), für mitwandernde Schattenkamera. */
-  sunDirection: THREE.Vector3;
-}
 
 /**
  * Leere Testwelt für Meilenstein 1: große Wiese mit Raster, Säulen, Blöcke und
  * Torbögen als Größen- und Geschwindigkeitsreferenz.
  */
 export function buildTestArena(scene: THREE.Scene, shadows: boolean): Arena {
-  const collision = new SimpleCollisionWorld(0);
+  const collision = new StaticWorld(0);
 
   // Himmel
   const sky = new Sky();
@@ -210,10 +202,11 @@ export function buildTestArena(scene: THREE.Scene, shadows: boolean): Arena {
   addArch(40, 30, 0, 3, 2.5);
 
   return {
+    name: 'Testgelände',
     collision,
     sun,
     sunDirection: sunDir,
-    spawns: { quad: new THREE.Vector3(0, 0.012, 0), plane: new THREE.Vector3(RUNWAY_X, 0, 25) },
+    spawns: { quad: new THREE.Vector3(0, 0.012, 0), quadYaw: 0, plane: new THREE.Vector3(RUNWAY_X, 0, 25), planeYaw: 0 },
     windsocks: [new THREE.Vector3(4, 0, 3), new THREE.Vector3(RUNWAY_X + 10, 0, 0)],
   };
 }

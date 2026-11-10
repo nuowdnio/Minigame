@@ -70,7 +70,11 @@ export class FlightController {
    * @param onGround true, solange die Drohne aufliegt (I-Term wird dann nicht aufgebaut)
    * @returns Motor-Ansteuerung 0..1 inkl. Idle (0 = aus)
    */
-  update(sticks: Sticks, gyro: GyroRates, onGround = false): number[] {
+  /**
+   * @param attitude Lage aus dem Beschleunigungssensor/Gyro (rad): bank + = rechts, pitch + = Nase hoch.
+   *                 Wird für Angle/Horizon benötigt.
+   */
+  update(sticks: Sticks, gyro: GyroRates, onGround = false, attitude?: { bank: number; pitch: number }): number[] {
     const cfg = this.cfg;
     if (!this.armed && sticks.throttle < cfg.armThrottleThreshold) {
       this.armed = true;
@@ -90,6 +94,29 @@ export class FlightController {
     sp.roll = betaflightRate(sticks.roll, this.rates.roll);
     sp.pitch = betaflightRate(sticks.pitch, this.rates.pitch);
     sp.yaw = betaflightRate(sticks.yaw, this.rates.yaw);
+
+    // Angle/Horizon: Selbststabilisierung (Betaflight: Winkelfehler · level strength)
+    if (attitude && this.mode !== 'acro') {
+      const R2D = 180 / Math.PI;
+      const rollAngle = attitude.bank * R2D; // + = rechts geneigt
+      const pitchAngle = -attitude.pitch * R2D; // + = Nase unten
+      const lim = cfg.angleLimit;
+      if (this.mode === 'angle') {
+        sp.roll = (sticks.roll * lim - rollAngle) * cfg.angleStrength;
+        sp.pitch = (sticks.pitch * lim - pitchAngle) * cfg.angleStrength;
+        sp.roll = Math.max(-cfg.angleMaxRate, Math.min(cfg.angleMaxRate, sp.roll));
+        sp.pitch = Math.max(-cfg.angleMaxRate, Math.min(cfg.angleMaxRate, sp.pitch));
+      } else {
+        // Horizon: nahe der Stickmitte wie Angle, bei Vollausschlag reines Acro (Flips möglich)
+        const k = Math.max(0, 1 - Math.max(Math.abs(sticks.roll), Math.abs(sticks.pitch)) / 0.75);
+        const level = k * k;
+        // nur aufrichten, wenn die Drohne nicht über Kopf ist
+        if (Math.abs(rollAngle) < 100) {
+          sp.roll += -rollAngle * cfg.angleStrength * level;
+          sp.pitch += -pitchAngle * cfg.angleStrength * level;
+        }
+      }
+    }
 
     const throttle = throttleCurve(sticks.throttle, this.rates.throttleMid, this.rates.throttleExpo);
     // Am Boden mit wenig Gas: I-Term nicht aufbauen (wie Betaflight bei Gas unterhalb Airmode-Schwelle)

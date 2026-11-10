@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import type { CollisionWorld, ContactResult } from '../world/collision';
+
+const _contact: ContactResult = { normal: new THREE.Vector3(), depth: 0 };
 
 const _q = new THREE.Quaternion();
 const _v = new THREE.Vector3();
@@ -32,6 +35,8 @@ export class ChaseCameraRig {
   private readonly pos = new THREE.Vector3();
   private initialized = false;
   distance = 1.6;
+  /** Optional: Welt-Geometrie, damit die Kamera nicht in Wände taucht. */
+  world: CollisionWorld | null = null;
   height = 0.55;
 
   reset(): void {
@@ -69,6 +74,13 @@ export class ChaseCameraRig {
     // nicht unter den Boden
     this.pos.y = Math.max(this.pos.y, 0.15);
     camera.position.copy(this.pos);
+    // nicht in Gebäude/Bäume eintauchen: entlang der Sichtlinie zur Drohne heranziehen
+    if (this.world) {
+      const look = new THREE.Vector3(dronePos.x, dronePos.y + 0.15, dronePos.z);
+      for (let i = 0; i < 12 && this.world.sphereContact(camera.position, 0.25, _contact); i++) {
+        camera.position.lerp(look, 0.25);
+      }
+    }
     camera.lookAt(dronePos.x, dronePos.y + 0.15, dronePos.z);
   }
 }

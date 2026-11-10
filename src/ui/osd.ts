@@ -25,6 +25,7 @@ export class Osd {
       <div class="osd-tc"><span data-f="lap"></span></div>
       <div class="osd-center"><span data-f="warn" class="warn"></span></div>
       <div class="osd-cross">-+-</div>
+      <div class="osd-msgs"></div>
     `;
     this.el.querySelectorAll<HTMLElement>('[data-f]').forEach((e) => (this.f[e.dataset.f!] = e));
     parent.appendChild(this.el);
@@ -67,6 +68,18 @@ export class Osd {
     else if (cell < 3.5 * (bat.params.ocvCurve[0][1] / 3.27)) warn = 'LOW BATTERY';
     f.warn.textContent = warn;
     f.volt.classList.toggle('blink', cell < 3.5 * (bat.params.ocvCurve[0][1] / 3.27));
+  }
+
+  /** Schadens-/Ereignismeldung einblenden (verschwindet nach einigen Sekunden). */
+  message(text: string, severity: 'info' | 'warn' | 'critical' = 'warn'): void {
+    const box = this.el.querySelector('.osd-msgs')!;
+    const div = document.createElement('div');
+    div.className = `osd-msg ${severity}`;
+    div.textContent = text;
+    box.prepend(div);
+    while (box.children.length > 5) box.lastChild!.remove();
+    setTimeout(() => div.classList.add('fade'), severity === 'critical' ? 6000 : 4000);
+    setTimeout(() => div.remove(), severity === 'critical' ? 7000 : 5000);
   }
 
   setLap(text: string): void {

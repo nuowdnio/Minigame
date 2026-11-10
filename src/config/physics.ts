@@ -25,8 +25,12 @@ export interface MotorLayoutEntry {
 export interface ContactPointDef {
   position: Vec3Like;
   radius: number;
+  /** Rad (rollt längs, blockiert seitlich). */
   wheel?: boolean;
+  /** Gelenktes Rad (Bugrad). */
   steerable?: boolean;
+  /** Bauteil für das Schadensmodell (z. B. 'motor0', 'wingR', 'gear', 'prop', 'tail', 'body'). */
+  part?: string;
 }
 
 export const PHYSICS = {
@@ -67,24 +71,33 @@ export const PHYSICS = {
   },
 
   motor: {
-    /** Motor-KV (U/min pro Volt). */
+    /** Motor-KV (U/min pro Volt), z. B. 2306-Motor mit 1850 KV. */
     kv: 1850,
-    /** Anteil der Leerlaufdrehzahl, der unter Volllast mit Propeller erreicht wird. */
-    loadFactor: 0.72,
-    /** Statischer Maximalschub pro Motor bei voll geladenem Akku auf Meereshöhe (N). */
+    /** Statischer Maximalschub pro Motor bei voll geladenem Akku (ohne Sag), Meereshöhe (N). */
     maxThrust: 14.0,
     /** Verhältnis Propeller-Drehmoment / Schub (m). Bestimmt die Gier-Autorität. */
     torqueToThrust: 0.015,
-    /** Zeitkonstante beim Hochdrehen (s). */
-    spinUpTau: 0.018,
-    /** Zeitkonstante beim Herunterdrehen (s), mit aktivem Bremsen (Damped Light). */
-    spinDownTau: 0.028,
     /** Leerlauf-Ausgabe im scharfen Zustand (Anteil, wie Betaflight "dshot_idle_value"). */
     idle: 0.055,
-    /** Trägheitsmoment von Glocke + Propeller (kg·m²), erzeugt Gier-Reaktionsmoment beim Beschleunigen. */
-    rotorInertia: 6e-6,
-    /** Elektrisch -> mechanischer Wirkungsgrad (Motor + ESC). */
-    efficiency: 0.7,
+    /** Trägheitsmoment von Glocke + Propeller (kg·m²). Bestimmt mit R und KV die Hochlaufzeit. */
+    rotorInertia: 5e-6,
+    /** Wicklungswiderstand inkl. Zuleitung (Ω). */
+    windingResistance: 0.07,
+    /** Leerlaufstrom (A). */
+    noLoadCurrent: 1.2,
+    /** Dauerstromgrenze des Reglers (A). */
+    escCurrentLimit: 55,
+    /** Motor-Wärmekapazität (J/K), Kühlung im Stand (W/K) und pro 1000 rad/s bzw. 15 m/s Fahrtwind (W/K). */
+    motorHeatCapacity: 25,
+    motorCooling: 0.3,
+    motorCoolingPerKrads: 0.35,
+    /** Wicklung brennt durch (°C). */
+    motorMaxTemp: 180,
+    /** Regler: Wärmekapazität (J/K), Durchlasswiderstand (Ω), Kühlung (W/K), Grenztemperatur (°C). */
+    escHeatCapacity: 3,
+    escResistance: 0.005,
+    escCooling: 0.4,
+    escMaxTemp: 130,
     /** Propeller-Durchmesser (m), 5". */
     propDiameter: 0.127,
     /** Propeller-Steigung (m pro Umdrehung), 4.3". */
@@ -98,6 +111,8 @@ export const PHYSICS = {
     zeroThrustSpeedFactor: 1.3,
     /** Schubgewinn durch Ducts (Cinewhoop/Whoop), 1 = offene Propeller. */
     ductGain: 1.0,
+    /** Maximaler Schubgewinn durch Vorwärtsfahrt (Translational Lift). */
+    translationalLift: 0.12,
   },
 
   battery: {
