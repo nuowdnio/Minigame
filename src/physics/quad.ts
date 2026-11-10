@@ -1,9 +1,10 @@
 import { Vector3 } from 'three';
 import type { PhysicsConfig } from '../config/physics';
 import type { Environment } from '../env/environment';
-import type { ContactResult } from '../world/collision';
-import { airDensity, dragForce, groundEffectFactor, inflowFactor } from './aero';
+import type { AirState } from '../env/atmosphere';
+import { dragForce, groundEffectFactor, inflowFactor } from './aero';
 import { Battery } from './battery';
+import { buildContactPoints, solveContacts, type ContactPoint } from './contacts';
 import { Motor, targetOmega } from './motor';
 import { RigidBody } from './rigidbody';
 
@@ -15,20 +16,58 @@ const _rWorld = new Vector3();
 const _fBody = new Vector3();
 const _fWorld = new Vector3();
 const _drag = new Vector3();
-const _vp = new Vector3();
-const _vt = new Vector3();
-const _corr = new Vector3();
-const _contact: ContactResult = { normal: new Vector3(), depth: 0 };
 
 /** Telemetrie eines Physik-Schritts (für OSD/Debug). */
 export interface QuadTelemetry {
   airDensity: number;
+  airTemperatureC: number;
   totalThrust: number;
   current: number;
   voltage: number;
   /** Stärkster Aufprall im letzten Schritt (Normalgeschwindigkeit, m/s). */
   impactSpeed: number;
   onGround: boolean;
+  wheelsOnGround: number;
+  /** Geschwindigkeit relativ zur Luft (m/s). */
+  airspeed: number;
+  /** Windgeschwindigkeit am Ort (m/s). */
+  windSpeed: number;
+  /** Propwash-Intensität 0..1 (Sinkflug in die eigene Abströmung). */
+  propwash: number;
+}
+
+export function createTelemetry(): QuadTelemetry {
+  return {
+    airDensity: 1.225,
+    airTemperatureC: 15,
+    totalThrust: 0,
+    current: 0,
+    voltage: 0,
+    impactSpeed: 0,
+    onGround: false,
+    wheelsOnGround: 0,
+    airspeed: 0,
+    windSpeed: 0,
+    propwash: 0,
+  };
+}
+
+/** Normalverteiltes Rauschen (Box-Muller). */
+export function gaussian(): number {
+  const u = 1 - Math.random();
+  const v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+/**
+ * Propwash / Wirbelringstadium: Intensität 0..1 abhängig vom Verhältnis
+ * Sinkgeschwindigkeit (entlang der Schubachse) zu induzierter Geschwindigkeit im Schwebeflug.
+ * Maximal bei Sinkrate ≈ 1 · v_h, verschwindet unter 0.3 und über 2.2 · v_h.
+ */
+export function propwashIntensity(descentRatio: number): number {
+  if (descentRatio <= 0.25 || descentRatio >= 2.2) return 0;
+  const x = (descentRatio - 0.95) / 0.55;
+  return Math.exp(-x * x);
 }
 
 /**
@@ -40,16 +79,12 @@ export class Quad {
   readonly motors: Motor[];
   readonly battery: Battery;
   readonly motorPositions: Vector3[];
-  readonly contactPoints: { position: Vector3; radius: number }[];
+  readonly contactPoints: ContactPoint[];
   readonly omegaRef: number;
-  readonly telemetry: QuadTelemetry = {
-    airDensity: 1.225,
-    totalThrust: 0,
-    current: 0,
-    voltage: 0,
-    impactSpeed: 0,
-    onGround: false,
-  };
+  readonly telemetry: QuadTelemetry = createTelemetry();
+  private readonly air: AirState = { temperatureK: 288, pressurePa: 101325, density: 1.225 };
+  /** Zustand des gefilterten Propwash-Rauschens je Motor. */
+  private readonly washNoise: number[];
 
   constructor(readonly config: PhysicsConfig) {
     const f = config.frame;
@@ -58,23 +93,23 @@ export class Quad {
     const fullVoltage = config.battery.ocvCurve[config.battery.ocvCurve.length - 1][1] * config.battery.cells;
     this.motors = f.motors.map(() => new Motor(config.motor, fullVoltage));
     this.motorPositions = f.motors.map((m) => new Vector3(m.position.x, m.position.y, m.position.z));
-    this.contactPoints = f.contactPoints.map((c) => ({
-      position: new Vector3(c.position.x, c.position.y, c.position.z),
-      radius: c.radius,
-    }));
+    this.contactPoints = buildContactPoints(f.contactPoints);
     this.omegaRef = targetOmega(1, fullVoltage, config.motor);
+    this.washNoise = f.motors.map(() => 0);
     this.telemetry.voltage = this.battery.terminalVoltage();
   }
 
-  reset(position: Vector3, yaw = 0): void {
+  reset(position: Vector3, yaw = 0, ambientC = 25): void {
     const b = this.body;
     b.position.copy(position);
     b.velocity.set(0, 0, 0);
     b.angularVelocity.set(0, 0, 0);
     b.orientation.setFromAxisAngle(_v.set(0, 1, 0), yaw);
     for (const m of this.motors) m.reset();
-    this.battery.reset();
+    this.battery.reset(ambientC);
+    this.washNoise.fill(0);
     this.telemetry.impactSpeed = 0;
+    this.telemetry.voltage = this.battery.terminalVoltage();
   }
 
   /**
@@ -94,7 +129,8 @@ export class Quad {
     }
 
     // --- Luft ------------------------------------------------------------
-    const rho = airDensity(env.baseAltitude + b.position.y, cfg.air.seaLevelDensity, cfg.air.scaleHeight);
+    const air = env.air(b.position.y, this.air);
+    const rho = air.density;
     const densityRatio = rho / cfg.air.seaLevelDensity;
     env.wind(b.position, time, _wind);
     _v.copy(b.velocity).sub(_wind);
@@ -104,11 +140,15 @@ export class Quad {
     const upY = _v2.set(0, 1, 0).applyQuaternion(b.orientation).y;
 
     const rotorRadius = cfg.motor.propDiameter / 2;
+    const discArea = Math.PI * rotorRadius * rotorRadius;
     const w = b.angularVelocity;
+    const duct = cfg.motor.ductGain;
     let totalThrust = 0;
     let rotorSpeedSum = 0;
     let loadCurrent = 0;
     let yawTorque = 0;
+    let washMax = 0;
+    const washK = 1 - Math.exp(-dt / 0.012); // Bandbreite des Propwash-Rauschens (~13 Hz)
 
     for (let i = 0; i < this.motors.length; i++) {
       const m = this.motors[i];
@@ -124,6 +164,15 @@ export class Quad {
         cfg.motor.maxInflowGain,
       );
 
+      // Propwash: Sinken in die eigene Abströmung -> Schubverlust + unruhiger Schub
+      const tHover = Math.max(0.02, m.staticThrust);
+      const vInduced = Math.sqrt(tHover / (2 * rho * discArea));
+      const descentRatio = -vAxial / vInduced;
+      const wash = propwashIntensity(descentRatio) * Math.min(1, m.omega / (0.15 * this.omegaRef));
+      this.washNoise[i] += (gaussian() - this.washNoise[i]) * washK;
+      gain *= 1 - cfg.aero.propwash.thrustLoss * wash + cfg.aero.propwash.noise * wash * this.washNoise[i];
+      if (wash > washMax) washMax = wash;
+
       if (cfg.aero.groundEffect.enabled && upY > 0.3) {
         _rWorld.copy(r).applyQuaternion(b.orientation).add(b.position);
         const h = env.collision.heightAbove(_rWorld, 2) / upY;
@@ -131,7 +180,7 @@ export class Quad {
         gain *= 1 + (ge - 1) * upY;
       }
 
-      m.computeForces(densityRatio, gain);
+      m.computeForces(densityRatio, gain * duct);
       totalThrust += m.thrust;
       rotorSpeedSum += m.omega / this.omegaRef;
 
@@ -160,73 +209,28 @@ export class Quad {
     b.force.add(_fWorld);
 
     // Rotationsdämpfung
-    b.torque.addScaledVector(w, -cfg.aero.angularDrag);
+    b.torque.addScaledVector(w, -cfg.aero.angularDrag * densityRatio);
 
     // --- Schwerkraft -----------------------------------------------------
     b.force.y -= b.mass * cfg.gravity;
 
     // --- Akku ------------------------------------------------------------
-    bat.step(loadCurrent, dt);
+    const airspeed = _vAirBody.length();
+    bat.step(loadCurrent, dt, air.temperatureK - 273.15, airspeed);
 
     // --- Integration + Kontakte -----------------------------------------
     b.integrateVelocity(dt);
-    this.solveContacts(env);
+    const t = this.telemetry;
+    solveContacts(b, this.contactPoints, env.collision, cfg.contact, t);
     b.integratePosition(dt);
 
-    const t = this.telemetry;
     t.airDensity = rho;
+    t.airTemperatureC = air.temperatureK - 273.15;
     t.totalThrust = totalThrust;
     t.current = bat.current;
     t.voltage = bat.terminalVoltage();
-  }
-
-  /** Kontakte per Impulsverfahren (Stoß + Coulomb-Reibung) und Positionskorrektur auflösen. */
-  private solveContacts(env: Environment): void {
-    const b = this.body;
-    const cc = this.config.contact;
-    let maxImpact = 0;
-    let onGround = false;
-
-    for (let iter = 0; iter < cc.iterations; iter++) {
-      for (const cp of this.contactPoints) {
-        _rWorld.copy(cp.position).applyQuaternion(b.orientation);
-        _v.copy(_rWorld).add(b.position);
-        const c = env.collision.sphereContact(_v, cp.radius, _contact);
-        if (!c) continue;
-        onGround = true;
-        const n = c.normal;
-
-        // Positionskorrektur nur einmal pro Schritt
-        if (iter === 0) {
-          _corr.copy(n).multiplyScalar(c.depth * cc.positionCorrection);
-          b.position.add(_corr);
-        }
-
-        b.pointVelocity(_rWorld, _vp);
-        const vn = _vp.dot(n);
-        if (vn >= 0) continue;
-        if (iter === 0) maxImpact = Math.max(maxImpact, -vn);
-
-        const e = -vn > 1.0 ? cc.restitution : 0;
-        const kn = b.effectiveInverseMass(_rWorld, n);
-        const jn = (-(1 + e) * vn) / kn;
-        _v2.copy(n).multiplyScalar(jn);
-        b.applyImpulseAtWorldOffset(_v2, _rWorld);
-
-        // Reibung
-        b.pointVelocity(_rWorld, _vp);
-        _vt.copy(_vp).addScaledVector(n, -_vp.dot(n));
-        const vtLen = _vt.length();
-        if (vtLen > 1e-6) {
-          _vt.multiplyScalar(1 / vtLen);
-          const kt = b.effectiveInverseMass(_rWorld, _vt);
-          const jt = Math.min(vtLen / kt, cc.friction * jn);
-          _v2.copy(_vt).multiplyScalar(-jt);
-          b.applyImpulseAtWorldOffset(_v2, _rWorld);
-        }
-      }
-    }
-    this.telemetry.impactSpeed = maxImpact;
-    this.telemetry.onGround = onGround;
+    t.airspeed = airspeed;
+    t.windSpeed = _wind.length();
+    t.propwash = washMax;
   }
 }

@@ -14,6 +14,8 @@ export function rng(seed: number): () => number {
   };
 }
 
+const RUNWAY_X = 70;
+
 /** Prozedurale Bodentextur: Gras-Ton mit Rasterlinien alle 1 m und stärker alle 10 m. */
 function groundTexture(): THREE.CanvasTexture {
   const size = 512;
@@ -51,6 +53,10 @@ function groundTexture(): THREE.CanvasTexture {
 
 export interface Arena {
   collision: SimpleCollisionWorld;
+  /** Startpunkte: Drohnen auf dem Startplatz, Flugzeuge am Pistenanfang (Blick nach −z). */
+  spawns: { quad: THREE.Vector3; plane: THREE.Vector3 };
+  /** Standorte der Windsäcke. */
+  windsocks: THREE.Vector3[];
   sun: THREE.DirectionalLight;
   /** Richtung zur Sonne (normiert), für mitwandernde Schattenkamera. */
   sunDirection: THREE.Vector3;
@@ -101,6 +107,23 @@ export function buildTestArena(scene: THREE.Scene, shadows: boolean): Arena {
   ground.receiveShadow = true;
   scene.add(ground);
 
+  // Graspiste/Asphaltpiste für Flugzeuge
+  const runway = new THREE.Mesh(
+    new THREE.PlaneGeometry(14, 320),
+    new THREE.MeshStandardMaterial({ color: 0x4a4d52, roughness: 0.95 }),
+  );
+  runway.rotation.x = -Math.PI / 2;
+  runway.position.set(RUNWAY_X, 0.005, -120);
+  runway.receiveShadow = true;
+  scene.add(runway);
+  const stripeMat = new THREE.MeshBasicMaterial({ color: 0xeeeeee });
+  for (let z = 30; z > -270; z -= 12) {
+    const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 5), stripeMat);
+    stripe.rotation.x = -Math.PI / 2;
+    stripe.position.set(RUNWAY_X, 0.01, z);
+    scene.add(stripe);
+  }
+
   // Startplattform
   const pad = new THREE.Mesh(
     new THREE.CylinderGeometry(1.2, 1.2, 0.02, 32),
@@ -142,6 +165,7 @@ export function buildTestArena(scene: THREE.Scene, shadows: boolean): Arena {
     const x = Math.cos(ang) * dist;
     const z = Math.sin(ang) * dist;
     if (Math.abs(x) < 12 && z < 0 && z > -170) continue; // Slalom-Gasse freihalten
+    if (Math.abs(x - RUNWAY_X) < 45 && z < 120 && z > -420) continue; // Piste + Anflug freihalten
     const w = 2 + r() * 8;
     const h = 1 + r() * (r() < 0.2 ? 30 : 8);
     const d = 2 + r() * 8;
@@ -185,5 +209,11 @@ export function buildTestArena(scene: THREE.Scene, shadows: boolean): Arena {
   addArch(-40, -100, Math.PI / 2, 4, 3);
   addArch(40, 30, 0, 3, 2.5);
 
-  return { collision, sun, sunDirection: sunDir };
+  return {
+    collision,
+    sun,
+    sunDirection: sunDir,
+    spawns: { quad: new THREE.Vector3(0, 0.012, 0), plane: new THREE.Vector3(RUNWAY_X, 0, 25) },
+    windsocks: [new THREE.Vector3(4, 0, 3), new THREE.Vector3(RUNWAY_X + 10, 0, 0)],
+  };
 }

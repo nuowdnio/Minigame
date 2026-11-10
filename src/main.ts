@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import './style.css';
-import { PHYSICS } from './config/physics';
 import type { Settings } from './config/defaults';
-import { createCalmEnvironment } from './env/environment';
+import { WorldEnvironment } from './env/environment';
 import { Simulation } from './game/simulation';
 import { hasSavedSettings, loadSettings, saveSettings } from './game/storage';
 import { InputManager } from './input/input';
 import { TouchControls, isTouchDevice } from './input/touchControls';
 import { ChaseCameraRig, FpvCameraRig, horizontalToVerticalFov } from './render/cameras';
-import { DroneMesh } from './render/droneMesh';
+import { createVehicleView, type VehicleView } from './render/vehicleView';
+import { WindParticles, Windsock } from './render/windVisuals';
 import { Osd } from './ui/osd';
 import { SettingsMenu } from './ui/settingsMenu';
 import { TelemetryPanel } from './ui/telemetryPanel';
@@ -39,13 +39,36 @@ const scene = new THREE.Scene();
 const arena = buildTestArena(scene, true);
 const camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.02, 3000);
 
-const drone = new DroneMesh(PHYSICS.frame.motors, PHYSICS.motor.propDiameter);
-scene.add(drone.root);
-
 // --- Simulation -------------------------------------------------------------
-const env = createCalmEnvironment(arena.collision);
+const env = new WorldEnvironment(arena.collision, settings.environment, arena.collision.boxes);
 const sim = new Simulation(env, settings);
-sim.reset(new THREE.Vector3(0, 0.05, 0), 0);
+let view: VehicleView = createVehicleView(sim.vehicle);
+scene.add(view.root);
+
+function spawnPoint(): THREE.Vector3 {
+  return sim.vehicle.kind === 'plane' ? arena.spawns.plane : arena.spawns.quad;
+}
+sim.reset(spawnPoint(), 0);
+
+/** Fluggerät wechseln: Physik und Modell neu aufbauen. */
+function switchVehicle(id: string): void {
+  sim.setVehicle(id, settings);
+  scene.remove(view.root);
+  view = createVehicleView(sim.vehicle);
+  scene.add(view.root);
+  sim.reset(spawnPoint(), 0);
+  chaseRig.reset();
+  input.resetKeyboardThrottle();
+}
+
+// Wind sichtbar machen
+const particles = new WindParticles();
+scene.add(particles.points);
+const socks = arena.windsocks.map((p) => {
+  const w = new Windsock(p);
+  scene.add(w.root);
+  return w;
+});
 
 const input = new InputManager(settings);
 const fpvRig = new FpvCameraRig();
@@ -69,8 +92,11 @@ const menu = new SettingsMenu(
   ui,
   settings,
   (s) => {
+    const vehicleChanged = s.vehicle !== settings.vehicle;
     settings = s;
     saveSettings(settings);
+    env.update(settings.environment);
+    if (vehicleChanged) switchVehicle(settings.vehicle);
     sim.applySettings(settings);
     input.setSettings(settings);
     touch.applySettings(settings);
@@ -89,7 +115,7 @@ function closeMenu(): void {
 }
 
 function resetDrone(): void {
-  sim.reset();
+  sim.reset(spawnPoint(), 0);
   chaseRig.reset();
   input.resetKeyboardThrottle();
 }
@@ -126,7 +152,6 @@ document.addEventListener('visibilitychange', () => {
 // --- Hauptschleife ----------------------------------------------------------
 const renderPos = new THREE.Vector3();
 const renderQuat = new THREE.Quaternion();
-const omegas: number[] = [0, 0, 0, 0];
 let last = performance.now();
 let accumulator = 0;
 
@@ -160,21 +185,29 @@ function frame(now: number): void {
 
   // Interpolation zwischen den letzten beiden Physikzuständen
   const alpha = paused ? 1 : accumulator / sim.dt;
-  const body = sim.quad.body;
+  const vehicle = sim.vehicle;
+  const body = vehicle.body;
   renderPos.lerpVectors(sim.prevPosition, body.position, alpha);
   renderQuat.slerpQuaternions(sim.prevOrientation, body.orientation, alpha);
-  drone.root.position.copy(renderPos);
-  drone.root.quaternion.copy(renderQuat);
-  for (let i = 0; i < omegas.length; i++) omegas[i] = sim.quad.motors[i].omega;
-  drone.updateProps(omegas, paused ? 0 : dt);
+  view.root.position.copy(renderPos);
+  view.root.quaternion.copy(renderQuat);
+  view.update(vehicle, paused ? 0 : dt);
 
   updateCameraProjection();
   if (settings.camera.view === 'fpv') {
-    drone.root.visible = false;
-    fpvRig.update(camera, renderPos, renderQuat, settings.camera.angle);
+    view.root.visible = false;
+    fpvRig.mount.copy(vehicle.cameraMount);
+    fpvRig.update(camera, renderPos, renderQuat, vehicle.cameraTilt(settings));
   } else {
-    drone.root.visible = true;
+    view.root.visible = true;
+    chaseRig.distance = Math.max(1.2, vehicle.size * 2.4);
+    chaseRig.height = 0.3 + vehicle.size * 0.6;
     chaseRig.update(camera, renderPos, renderQuat, body.velocity, dt);
+  }
+
+  if (!paused) {
+    particles.update(env, sim.time, camera.position, dt);
+    for (const w of socks) w.update(env, sim.time, dt);
   }
 
   // Schatten folgt der Drohne

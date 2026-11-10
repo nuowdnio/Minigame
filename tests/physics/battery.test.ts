@@ -59,3 +59,31 @@ describe('Battery', () => {
     expect(b.openCircuitVoltage()).toBeLessThan(v0 - 1);
   });
 });
+
+describe('Akkutemperatur', () => {
+  it('kalter Akku hat mehr Innenwiderstand und mehr Spannungseinbruch', () => {
+    const warm = new Battery(PHYSICS.battery);
+    const cold = new Battery(PHYSICS.battery);
+    warm.reset(25);
+    cold.reset(0);
+    expect(cold.resistance()).toBeGreaterThan(warm.resistance() * 2);
+    expect(cold.terminalVoltage(80)).toBeLessThan(warm.terminalVoltage(80) - 1.5);
+  });
+
+  it('erwärmt sich unter Last und kühlt im Fahrtwind schneller ab', () => {
+    const b = new Battery(PHYSICS.battery);
+    b.reset(20);
+    for (let i = 0; i < 30000; i++) b.step(60, 0.001, 20, 0);
+    expect(b.temperatureC).toBeGreaterThan(25);
+    const hot = b.temperatureC;
+    const still = new Battery(PHYSICS.battery);
+    still.temperatureC = hot;
+    const windy = new Battery(PHYSICS.battery);
+    windy.temperatureC = hot;
+    for (let i = 0; i < 30000; i++) {
+      still.step(0, 0.001, 20, 0);
+      windy.step(0, 0.001, 20, 25);
+    }
+    expect(windy.temperatureC).toBeLessThan(still.temperatureC);
+  });
+});

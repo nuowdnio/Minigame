@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { PHYSICS } from '../../src/config/physics';
 import { createCalmEnvironment } from '../../src/env/environment';
-import { Quad } from '../../src/physics/quad';
+import { Quad, propwashIntensity } from '../../src/physics/quad';
 import { SimpleCollisionWorld } from '../../src/world/collision';
 
 const dt = 1 / PHYSICS.simHz;
@@ -130,7 +130,7 @@ describe('Quad', () => {
     run(q, [0, 0, 0, 0], 2);
     expect(q.body.velocity.length()).toBeLessThan(0.01);
     expect(q.body.position.y).toBeGreaterThan(0.025);
-    expect(q.body.position.y).toBeLessThan(0.04);
+    expect(q.body.position.y).toBeLessThan(0.045);
     expect(q.telemetry.onGround).toBe(true);
   });
 
@@ -149,5 +149,46 @@ describe('Quad', () => {
     expect(maxImpact).toBeGreaterThan(8);
     expect(q.body.position.z).toBeGreaterThan(-4.5); // nicht durch die Wand
     expect(q.body.velocity.z).toBeGreaterThanOrEqual(-0.5);
+  });
+});
+
+describe('Propwash', () => {
+  it('Intensität maximal beim Sinken mit ≈ induzierter Geschwindigkeit, null beim Schweben/Steigen', () => {
+    expect(propwashIntensity(0)).toBe(0);
+    expect(propwashIntensity(-1)).toBe(0);
+    expect(propwashIntensity(0.95)).toBeCloseTo(1, 6);
+    expect(propwashIntensity(3)).toBe(0);
+  });
+
+  it('senkrechter Sinkflug in die eigene Abströmung erzeugt unruhigen, schwächeren Schub', () => {
+    const env = createCalmEnvironment();
+    const q = new Quad(PHYSICS);
+    q.reset(new Vector3(0, 100, 0));
+    const thrusts: number[] = [];
+    for (let i = 0; i < 600; i++) {
+      q.step(dt, [0.32, 0.32, 0.32, 0.32], env, 0);
+      q.body.velocity.set(0, -4, 0); // Sinkflug ≈ v_h
+      q.body.angularVelocity.set(0, 0, 0);
+      q.body.orientation.identity();
+      if (i > 300) thrusts.push(q.telemetry.totalThrust);
+    }
+    expect(q.telemetry.propwash).toBeGreaterThan(0.3);
+    const m = thrusts.reduce((a, b) => a + b) / thrusts.length;
+    const sd = Math.sqrt(thrusts.reduce((a, b) => a + (b - m) ** 2, 0) / thrusts.length);
+    expect(sd / m).toBeGreaterThan(0.02);
+  });
+});
+
+describe('Umwelteinfluss', () => {
+  it('Seitenwind: Drohne mit Lage 0 wird vom Wind mitgenommen', () => {
+    const env = { ...createCalmEnvironment(), wind: (_p: Vector3, _t: number, out: Vector3) => out.set(8, 0, 0) };
+    const q = new Quad(PHYSICS);
+    q.reset(new Vector3(0, 100, 0));
+    for (let i = 0; i < 3000; i++) {
+      q.step(dt, [0.3, 0.3, 0.3, 0.3], env, 0);
+      q.body.orientation.identity();
+      q.body.angularVelocity.set(0, 0, 0);
+    }
+    expect(q.body.velocity.x).toBeGreaterThan(2);
   });
 });

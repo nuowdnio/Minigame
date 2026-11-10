@@ -1,3 +1,5 @@
+import { DEFAULT_ENVIRONMENT, type EnvironmentSettings } from './environment';
+
 /**
  * Standardwerte für die vom Spieler einstellbaren Optionen (Einstellungsmenü).
  * Werden im localStorage überschrieben.
@@ -25,9 +27,16 @@ export interface RatesSettings {
 export type FlightMode = 'acro' | 'angle' | 'horizon';
 export type CameraView = 'fpv' | 'chase';
 
+export type PlaneMode = 'manual' | 'gyro' | 'angle';
+
 export interface Settings {
+  /** Gewähltes Fluggerät (siehe vehicles/registry.ts). */
+  vehicle: string;
   rates: RatesSettings;
   flightMode: FlightMode;
+  /** Flugmodus für Flugzeuge: manuell, stabilisiert (Gyro) oder lagestabilisiert (Angle). */
+  planeMode: PlaneMode;
+  environment: EnvironmentSettings;
   camera: {
     /** Kamerawinkel nach oben (Uptilt) in Grad, 0 – 50. */
     angle: number;
@@ -51,6 +60,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  vehicle: 'freestyle5',
   rates: {
     roll: { rcRate: 1.0, superRate: 0.7, expo: 0.0 },
     pitch: { rcRate: 1.0, superRate: 0.7, expo: 0.0 },
@@ -59,6 +69,8 @@ export const DEFAULT_SETTINGS: Settings = {
     throttleExpo: 0.0,
   },
   flightMode: 'acro',
+  planeMode: 'gyro',
+  environment: { ...DEFAULT_ENVIRONMENT },
   camera: {
     angle: 25,
     fov: 120,

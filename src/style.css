@@ -83,3 +83,6 @@ body.is-touch .telemetry { top: 22%; }
 #rotate-hint { display: none; position: fixed; left: 50%; bottom: 40%; transform: translateX(-50%); z-index: 15; pointer-events: none;
   padding: 10px 16px; border-radius: 8px; background: rgba(0,0,0,0.7); font-size: 15px; }
 @media (orientation: portrait) and (pointer: coarse) { #rotate-hint { display: block; } }
+
+.menu .hint { margin: 2px 0 6px; font-size: 12px; color: #9fb3c8; }
+.menu optgroup { background: #0b1017; }

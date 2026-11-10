@@ -22,9 +22,11 @@ export interface MotorLayoutEntry {
   name: string;
 }
 
-export interface ContactPoint {
+export interface ContactPointDef {
   position: Vec3Like;
   radius: number;
+  wheel?: boolean;
+  steerable?: boolean;
 }
 
 export const PHYSICS = {
@@ -33,10 +35,8 @@ export const PHYSICS = {
   gravity: 9.81,
 
   air: {
-    /** Luftdichte auf Meereshöhe bei 15 °C (kg/m³). */
+    /** Bezugs-Luftdichte (kg/m³), bei der maxThrust gilt (ISA, Meereshöhe, 15 °C). */
     seaLevelDensity: 1.225,
-    /** Skalenhöhe der barometrischen Höhenformel (m). */
-    scaleHeight: 8500,
   },
 
   frame: {
@@ -63,7 +63,7 @@ export const PHYSICS = {
       { position: { x: 0.0, y: -0.02, z: 0.0 }, radius: 0.02 },
       { position: { x: 0.0, y: 0.045, z: 0.01 }, radius: 0.025 }, // Akku oben
       { position: { x: 0.0, y: 0.015, z: -0.06 }, radius: 0.02 }, // Kamera vorne
-    ] as ContactPoint[],
+    ] as ContactPointDef[],
   },
 
   motor: {
@@ -96,6 +96,8 @@ export const PHYSICS = {
      * Real meist 1.1–1.4, da der Propeller auch bei v = Pitch-Speed noch Schub erzeugt.
      */
     zeroThrustSpeedFactor: 1.3,
+    /** Schubgewinn durch Ducts (Cinewhoop/Whoop), 1 = offene Propeller. */
+    ductGain: 1.0,
   },
 
   battery: {
@@ -129,6 +131,12 @@ export const PHYSICS = {
       [0.9, 4.1],
       [1.0, 4.2],
     ] as [number, number][],
+    /** Wärmekapazität des Packs (J/K), ca. 1 J/(g·K). */
+    heatCapacity: 200,
+    /** Wärmeabgabe im Stand (W/K). */
+    coolingStill: 0.25,
+    /** Zusätzliche Wärmeabgabe pro m/s Fahrtwind (W/K). */
+    coolingPerSpeed: 0.04,
   },
 
   aero: {
@@ -147,6 +155,13 @@ export const PHYSICS = {
     rotorDrag: 0.025,
     /** Aerodynamische Rotationsdämpfung (N·m pro rad/s). */
     angularDrag: 0.0004,
+    /** Propwash/Wirbelringstadium beim Sinken in die eigene Abströmung. */
+    propwash: {
+      /** Mittlerer Schubverlust bei voller Ausprägung (Anteil). */
+      thrustLoss: 0.25,
+      /** Stärke der zufälligen Schubschwankung je Motor (Anteil). */
+      noise: 0.35,
+    },
     groundEffect: {
       enabled: true,
       /** Maximaler Schubgewinn direkt über dem Boden. */
@@ -162,6 +177,7 @@ export const PHYSICS = {
     /** Anteil der Eindringtiefe, der pro Schritt korrigiert wird. */
     positionCorrection: 0.6,
     iterations: 3,
+    rollingResistance: 0.04,
   },
 
   gyro: {
@@ -171,3 +187,5 @@ export const PHYSICS = {
 };
 
 export type PhysicsConfig = typeof PHYSICS;
+/** Physik-Konfiguration einer Multicopter-Drohne. */
+export type QuadConfig = PhysicsConfig;

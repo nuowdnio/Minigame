@@ -1,7 +1,10 @@
 /**
- * LiPo-Akkumodell: Leerlaufspannung abhängig vom Ladezustand, ohmscher Innenwiderstand
+ * Akkumodell (LiPo/Li-Ion): Leerlaufspannung abhängig vom Ladezustand, ohmscher Innenwiderstand
  * (sofortiger Spannungseinbruch unter Last) und ein RC-Glied für die Polarisation
  * (langsamer Einbruch, der sich nach Entlastung wieder erholt).
+ *
+ * Temperatur: Der Innenwiderstand verdoppelt sich etwa alle 20 K Abkühlung (kalter Akku = mehr Sag).
+ * Der Akku erwärmt sich durch I²·R und kühlt über den Fahrtwind ab.
  */
 
 export interface BatteryParams {
@@ -13,6 +16,17 @@ export interface BatteryParams {
   idleCurrent: number;
   startSoc: number;
   ocvCurve: [number, number][];
+  /** Wärmekapazität des Packs (J/K). */
+  heatCapacity: number;
+  /** Wärmeabgabe im Stand (W/K). */
+  coolingStill: number;
+  /** Zusätzliche Wärmeabgabe pro m/s Fahrtwind (W/K pro m/s). */
+  coolingPerSpeed: number;
+}
+
+/** Faktor des Innenwiderstands bei gegebener Zelltemperatur (1 bei 25 °C). */
+export function resistanceTemperatureFactor(tempC: number): number {
+  return Math.min(6, Math.max(0.5, Math.pow(2, (25 - tempC) / 20)));
 }
 
 /** Leerlaufspannung einer Zelle bei gegebenem Ladezustand (lineare Interpolation). */
@@ -38,16 +52,24 @@ export class Battery {
   current = 0;
   /** Verbrauchte Ladung (mAh). */
   usedMah = 0;
+  /** Zelltemperatur (°C). */
+  temperatureC = 25;
 
   constructor(readonly params: BatteryParams) {
     this.soc = params.startSoc;
   }
 
-  reset(): void {
+  reset(ambientC = 25): void {
     this.soc = this.params.startSoc;
     this.polarizationVoltage = 0;
     this.current = 0;
     this.usedMah = 0;
+    this.temperatureC = ambientC;
+  }
+
+  /** Aktueller ohmscher Innenwiderstand (Ω), temperaturabhängig. */
+  resistance(): number {
+    return this.params.internalResistance * resistanceTemperatureFactor(this.temperatureC);
   }
 
   /** Leerlaufspannung des gesamten Packs (V). */
@@ -57,7 +79,7 @@ export class Battery {
 
   /** Klemmenspannung bei gegebenem Laststrom (V). */
   terminalVoltage(current = this.current): number {
-    const v = this.openCircuitVoltage() - current * this.params.internalResistance - this.polarizationVoltage;
+    const v = this.openCircuitVoltage() - current * this.resistance() - this.polarizationVoltage;
     return Math.max(0, v);
   }
 
@@ -69,7 +91,7 @@ export class Battery {
   /**
    * Akku um dt Sekunden mit dem angegebenen Laststrom (ohne Grundverbrauch) entladen.
    */
-  step(loadCurrent: number, dt: number): void {
+  step(loadCurrent: number, dt: number, ambientC = 25, airspeed = 0): void {
     const p = this.params;
     const current = Math.max(0, loadCurrent) + p.idleCurrent;
     this.current = current;
@@ -77,8 +99,14 @@ export class Battery {
     this.usedMah += dMah;
     this.soc = Math.max(0, this.soc - dMah / p.capacityMah);
     // RC-Glied: dVp/dt = (I·Rp − Vp) / τ, exakt diskretisiert
-    const target = current * p.polarizationResistance;
+    const tf = resistanceTemperatureFactor(this.temperatureC);
+    const target = current * p.polarizationResistance * tf;
     const a = 1 - Math.exp(-dt / p.polarizationTau);
     this.polarizationVoltage += (target - this.polarizationVoltage) * a;
+
+    // Wärmebilanz: Verlustleistung I²R + Polarisation, Kühlung über Fahrtwind
+    const heat = current * current * this.resistance() + current * this.polarizationVoltage;
+    const cooling = (p.coolingStill + p.coolingPerSpeed * airspeed) * (this.temperatureC - ambientC);
+    this.temperatureC += ((heat - cooling) / p.heatCapacity) * dt;
   }
 }

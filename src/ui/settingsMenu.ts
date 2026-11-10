@@ -1,5 +1,7 @@
 import { DEFAULT_SETTINGS, type AxisRates, type Settings } from '../config/defaults';
 import { betaflightRate, maxRate } from '../fc/rates';
+import { VEHICLES, vehicleInfo } from '../vehicles/registry';
+import { airState } from '../env/atmosphere';
 
 type Axis = 'roll' | 'pitch' | 'yaw';
 const AXES: Axis[] = ['roll', 'pitch', 'yaw'];
@@ -44,6 +46,7 @@ export class SettingsMenu {
   private emit(): void {
     this.onChange(structuredClone(this.settings));
     this.drawCurves();
+    this.showAir();
     for (const a of AXES) {
       const e = this.el.querySelector<HTMLElement>(`[data-max="${a}"]`);
       if (e) e.textContent = `${Math.round(maxRate(this.settings.rates[a]))}°/s`;
@@ -64,7 +67,36 @@ export class SettingsMenu {
       <div class="menu-panel">
         <h1>Einstellungen</h1>
         <section>
-          <h2>Rates (Betaflight)</h2>
+          <h2>Fluggerät</h2>
+          <label>Modell <select data-k="vehicle">
+            <optgroup label="Drohnen">
+              ${VEHICLES.filter((v) => v.kind === 'quad').map((v) => `<option value="${v.id}" ${s.vehicle === v.id ? 'selected' : ''}>${v.name}</option>`).join('')}
+            </optgroup>
+            <optgroup label="Flugzeuge">
+              ${VEHICLES.filter((v) => v.kind === 'plane').map((v) => `<option value="${v.id}" ${s.vehicle === v.id ? 'selected' : ''}>${v.name}</option>`).join('')}
+            </optgroup>
+          </select></label>
+          <p class="hint" data-desc>${vehicleInfo(s.vehicle).description}</p>
+          <label>Flugmodus Flugzeug <select data-k="planeMode">
+            <option value="manual" ${s.planeMode === 'manual' ? 'selected' : ''}>Manuell (direkt auf die Ruder)</option>
+            <option value="gyro" ${s.planeMode === 'gyro' ? 'selected' : ''}>Stabilisiert (Kreisel dämpft)</option>
+            <option value="angle" ${s.planeMode === 'angle' ? 'selected' : ''}>Angle (richtet sich selbst auf)</option>
+          </select></label>
+        </section>
+        <section>
+          <h2>Umwelt</h2>
+          <label>Wind (m/s in 10 m) <input type="range" data-k="environment.windSpeed" min="0" max="15" step="0.5" value="${s.environment.windSpeed}"><output></output></label>
+          <label>Windrichtung (°, aus) <input type="range" data-k="environment.windDirection" min="0" max="359" step="1" value="${s.environment.windDirection}"><output></output></label>
+          <label>Böigkeit <input type="range" data-k="environment.turbulence" min="0" max="2" step="0.1" value="${s.environment.turbulence}"><output></output></label>
+          <label>Thermik (m/s) <input type="range" data-k="environment.thermalStrength" min="0" max="4" step="0.1" value="${s.environment.thermalStrength}"><output></output></label>
+          <label>Temperatur (°C) <input type="range" data-k="environment.temperature" min="-15" max="40" step="1" value="${s.environment.temperature}"><output></output></label>
+          <label>Luftfeuchte <input type="range" data-k="environment.humidity" min="0" max="1" step="0.05" value="${s.environment.humidity}"><output></output></label>
+          <label>Höhe über NN (m) <input type="range" data-k="environment.altitude" min="0" max="4500" step="50" value="${s.environment.altitude}"><output></output></label>
+          <label>Luftdruck QNH (hPa) <input type="range" data-k="environment.pressure" min="950" max="1050" step="1" value="${s.environment.pressure}"><output></output></label>
+          <p class="hint" data-air></p>
+        </section>
+        <section>
+          <h2>Rates (Betaflight, Drohnen)</h2>
           <div class="rates-wrap">
             <table class="rates">
               <tr><th></th><th>RC Rate</th><th>Super Rate</th><th>Expo</th><th>Max</th></tr>
@@ -136,6 +168,10 @@ export class SettingsMenu {
         const isNum = inp.type === 'range' || inp.hasAttribute('data-num');
         obj[key] = isNum ? parseFloat(inp.value) : inp.value;
         showValue();
+        if (key === 'vehicle') {
+          const d = this.el.querySelector<HTMLElement>('[data-desc]');
+          if (d) d.textContent = vehicleInfo(inp.value).description;
+        }
         this.emit();
       });
     });
@@ -147,6 +183,21 @@ export class SettingsMenu {
     });
     this.el.querySelector('[data-act="close"]')!.addEventListener('click', () => this.onClose());
     this.drawCurves();
+    this.showAir();
+  }
+
+  /** Luftdichte-Vorschau für die eingestellte Umwelt. */
+  private showAir(): void {
+    const e = this.el.querySelector<HTMLElement>('[data-air]');
+    if (!e) return;
+    const env = this.settings.environment;
+    const a = airState(env.altitude, {
+      seaLevelPressureHpa: env.pressure,
+      groundTemperatureC: env.temperature,
+      relativeHumidity: env.humidity,
+      groundAltitude: env.altitude,
+    });
+    e.textContent = `Luftdichte ${a.density.toFixed(3)} kg/m³ (${((a.density / 1.225) * 100).toFixed(0)} % von Normal) · Druck ${(a.pressurePa / 100).toFixed(0)} hPa`;
   }
 
   private drawCurves(): void {

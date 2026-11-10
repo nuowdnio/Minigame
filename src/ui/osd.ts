@@ -38,28 +38,35 @@ export class Osd {
     this.acc += dt;
     if (this.acc < 1 / 20) return; // OSD mit ~20 Hz aktualisieren, wie echtes Analog-OSD
     this.acc = 0;
-    const q = sim.quad;
-    const bat = q.battery;
-    const v = q.telemetry.voltage;
-    const cell = v / bat.params.cells;
+    const v = sim.vehicle;
+    const bat = v.battery;
+    const t = v.telemetry;
+    const volt = t.voltage;
+    const cell = volt / bat.params.cells;
     const f = this.f;
-    f.volt.textContent = `⚡${v.toFixed(1)}V`;
+    f.volt.textContent = `⚡${volt.toFixed(1)}V`;
     f.cell.textContent = `${cell.toFixed(2)}`;
-    f.amp.textContent = `${q.telemetry.current.toFixed(1)}A`;
+    f.amp.textContent = `${t.current.toFixed(1)}A`;
     f.mah.textContent = `${Math.round(bat.usedMah)}mAh`;
-    f.mode.textContent = sim.fc.armed ? sim.fc.mode.toUpperCase() : 'DISARMED';
+    f.mode.textContent = v.armed ? v.modeName : 'DISARMED';
     f.time.textContent = `⏱ ${fmtTime(sim.flightTime)}`;
-    const speed = q.body.velocity.length() * 3.6;
-    f.speed.textContent = `${Math.round(speed)} KM/H`;
-    f.alt.textContent = `ALT ${q.body.position.y.toFixed(1)}M`;
+    const speed = v.body.velocity.length() * 3.6;
+    f.speed.textContent =
+      v.kind === 'plane'
+        ? `${Math.round(speed)} KM/H  AS ${Math.round(t.airspeed * 3.6)}`
+        : `${Math.round(speed)} KM/H`;
+    f.alt.textContent = `ALT ${(v.body.position.y - sim.spawnPosition.y).toFixed(1)}M`;
     f.thr.textContent = `THR ${Math.round(throttle * 100)}%`;
 
     let warn = '';
-    if (!sim.fc.armed) warn = 'GAS RUNTER ZUM SCHARFSCHALTEN';
-    else if (cell < 3.3) warn = 'LAND NOW';
-    else if (cell < 3.5) warn = 'LOW BATTERY';
+    const stall = 'stall' in t ? (t as { stall: number }).stall : 0;
+    if (!v.armed) warn = 'GAS RUNTER ZUM SCHARFSCHALTEN';
+    else if (v.statusHint) warn = v.statusHint;
+    else if (stall > 0.5 && !t.onGround) warn = 'STALL';
+    else if (cell < 3.3 * (bat.params.ocvCurve[0][1] / 3.27)) warn = 'LAND NOW';
+    else if (cell < 3.5 * (bat.params.ocvCurve[0][1] / 3.27)) warn = 'LOW BATTERY';
     f.warn.textContent = warn;
-    f.volt.classList.toggle('blink', cell < 3.5);
+    f.volt.classList.toggle('blink', cell < 3.5 * (bat.params.ocvCurve[0][1] / 3.27));
   }
 
   setLap(text: string): void {
