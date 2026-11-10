@@ -8,6 +8,27 @@ npm run dev      # http://localhost:5173
 npm test         # Unit-Tests der Physik und des Flight Controllers
 ```
 
+## Auf dem iPad spielen
+
+Das Spiel läuft komplett per Touch – ohne Tastatur, Controller oder Fernsteuerung.
+
+- **Touch-Sticks:** linker Daumen = Gas (hoch/runter ziehen, bleibt stehen) + Gieren,
+  rechter Daumen = Nicken/Rollen (federn zurück). Der Stick-Mittelpunkt ist dort, wo der Daumen aufsetzt.
+  Bei Mode 1 sind Gas und Nicken getauscht. Stickgröße (= Empfindlichkeit) im Menü einstellbar.
+- **Buttons oben:** ⚙ Einstellungen · ↺ Reset · 🎥 FPV/Third Person · 📊 Telemetrie · ? Hilfe · ⛶ Vollbild
+- Erscheint automatisch auf Touch-Geräten (Einstellungen → „Touch-Sticks“: Automatisch / Immer an / Aus).
+- In Safari „Teilen → Zum Home-Bildschirm“ wählen: Dann startet das Spiel im Vollbild im Querformat.
+
+**So kommt das Spiel auf das iPad:**
+
+1. *Ohne Rechner (empfohlen):* GitHub Pages. Einmalig im Repository unter
+   **Settings → Pages → Source: „GitHub Actions“** einstellen. Danach baut der Workflow
+   `.github/workflows/pages.yml` das Spiel bei jedem Push auf `main` (oder manuell über „Actions → Run workflow“)
+   und veröffentlicht es unter `https://<benutzer>.github.io/<repo>/`.
+2. *Im Heimnetz:* `npm run dev` auf einem Rechner starten und auf dem iPad die angezeigte
+   „Network“-Adresse öffnen (z. B. `http://192.168.1.20:5173`).
+3. *Beliebiger Webspace:* `npm run build` und den Ordner `dist/` hochladen (relative Pfade).
+
 ## Stand: Meilenstein 1 – Flugphysik & Acro
 
 Leere Testwelt (Wiese mit 1-m-Raster, Säulen-Slalom, Blöcke, Torbögen) zum Einfliegen.
@@ -23,6 +44,8 @@ Leere Testwelt (Wiese mit 1-m-Raster, Säulen-Slalom, Blöcke, Torbögen) zum Ei
 | FPV ↔ Third Person | C | Select / X |
 | Einstellungen | Esc | |
 | Telemetrie / Hilfe | T / H | |
+
+Auf Touch-Geräten siehe oben „Auf dem iPad spielen“.
 
 Scharfschalten: Gas ganz nach unten. RC-Sender (EdgeTX/OpenTX als USB-Joystick) werden mit AETR-Zuordnung erkannt.
 

@@ -1,5 +1,6 @@
 import type { Settings } from '../config/defaults';
 import type { Sticks } from '../fc/flightController';
+import type { TouchControls } from './touchControls';
 
 /** Einmal-Aktionen (flankengesteuert). */
 export interface InputActions {
@@ -10,7 +11,7 @@ export interface InputActions {
   telemetry: boolean;
 }
 
-export type InputSource = 'keyboard' | 'gamepad' | 'rc';
+export type InputSource = 'keyboard' | 'gamepad' | 'rc' | 'touch';
 
 /**
  * Achsen-Zuordnung eines Joysticks. axis = Index in gamepad.axes.
@@ -65,6 +66,8 @@ export class InputManager {
   private kbThrottle = 0;
   private kb = { roll: 0, pitch: 0, yaw: 0 };
   private prevButtons: boolean[] = [];
+  /** Optionale Bildschirm-Sticks (iPad/Tablet). */
+  touch: TouchControls | null = null;
 
   constructor(private settings: Settings) {
     window.addEventListener('keydown', (e) => {
@@ -91,9 +94,15 @@ export class InputManager {
     a.help = this.consume('KeyH');
     a.telemetry = this.consume('KeyT');
 
+    if (this.touch) {
+      for (const act of this.touch.takeActions()) a[act] = true;
+    }
+
     const pad = this.findGamepad();
     if (pad) {
       this.readGamepad(pad);
+    } else if (this.touch?.active && this.settings.input.touchControls !== 'off') {
+      this.readTouch(this.touch);
     } else {
       this.readKeyboard(dt);
     }
@@ -141,6 +150,14 @@ export class InputManager {
     this.prevButtons = btn;
   }
 
+  private readTouch(t: TouchControls): void {
+    this.source = 'touch';
+    this.sticks.throttle = t.throttle;
+    this.sticks.roll = t.roll;
+    this.sticks.pitch = t.pitch;
+    this.sticks.yaw = t.yaw;
+  }
+
   private readKeyboard(dt: number): void {
     this.source = 'keyboard';
     const k = this.keys;
@@ -171,5 +188,6 @@ export class InputManager {
   /** Tastatur-Gas zurücksetzen (z. B. nach Reset). */
   resetKeyboardThrottle(): void {
     this.kbThrottle = 0;
+    this.touch?.resetThrottle();
   }
 }

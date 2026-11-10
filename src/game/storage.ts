@@ -18,6 +18,15 @@ export function deepMerge<T>(base: T, override: unknown): T {
   return out as T;
 }
 
+/** Wurden schon einmal Einstellungen gespeichert? */
+export function hasSavedSettings(): boolean {
+  try {
+    return localStorage.getItem(SETTINGS_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);

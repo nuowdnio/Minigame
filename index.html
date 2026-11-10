@@ -2,28 +2,51 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="FPV Racer" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icon-180.png" />
+    <link rel="icon" type="image/png" href="icon-180.png" />
     <title>FPV Racer</title>
   </head>
   <body>
     <div id="app"></div>
     <div id="ui"></div>
     <div id="help" class="help">
-      <h2>Steuerung</h2>
-      <table>
-        <tr><th></th><th>Tastatur (Notlösung)</th><th>Gamepad (Mode 2)</th></tr>
-        <tr><td>Gas</td><td>W / S (bleibt stehen), Leertaste = 0</td><td>Linker Stick hoch/runter</td></tr>
-        <tr><td>Gieren</td><td>A / D</td><td>Linker Stick links/rechts</td></tr>
-        <tr><td>Nicken</td><td>↑ / ↓</td><td>Rechter Stick hoch/runter</td></tr>
-        <tr><td>Rollen</td><td>← / →</td><td>Rechter Stick links/rechts</td></tr>
-        <tr><td>Voller Ausschlag</td><td>Shift halten</td><td>–</td></tr>
-        <tr><td>Reset</td><td>R</td><td>Start / Y</td></tr>
-        <tr><td>Kamera FPV / 3rd</td><td>C</td><td>Select / X</td></tr>
-      </table>
-      <p>Esc = Einstellungen (Rates, Kamerawinkel, FOV, Mode 1/2) · T = Telemetrie · H = Hilfe ein/aus</p>
-      <p>Scharfschalten: Gas ganz runter. Modus: <b>Acro</b> – die Drohne hält ihre Lage, nichts stabilisiert sich von selbst.</p>
-      <p>RC-Sender per USB werden als Joystick erkannt (Standard AETR-Zuordnung, Kalibrierung folgt in Meilenstein 2).</p>
+      <div class="touch-only">
+        <h2>Touch-Steuerung</h2>
+        <table>
+          <tr><td>Linker Daumen</td><td><b>Gas</b>: hoch/runter ziehen – der Wert bleibt beim Loslassen stehen.<br><b>Gieren</b>: links/rechts (federt zurück)</td></tr>
+          <tr><td>Rechter Daumen</td><td><b>Nicken</b> hoch/runter, <b>Rollen</b> links/rechts (federt zurück)</td></tr>
+          <tr><td>Stick-Mitte</td><td>dort, wo der Daumen aufsetzt</td></tr>
+          <tr><td>Buttons oben</td><td>⚙ Einstellungen · ↺ Reset · 🎥 Kamera · 📊 Telemetrie · ? Hilfe · ⛶ Vollbild</td></tr>
+        </table>
+        <p>Scharfschalten: Gas ganz nach unten ziehen. Für den Einstieg die Kamera auf <b>Third Person</b> (🎥) stellen.</p>
+        <p>Tipp: Über „Teilen → Zum Home-Bildschirm“ läuft das Spiel im Vollbild ohne Safari-Leisten.</p>
+      </div>
+      <div class="desktop-only">
+        <h2>Steuerung</h2>
+        <table>
+          <tr><th></th><th>Tastatur (Notlösung)</th><th>Gamepad (Mode 2)</th></tr>
+          <tr><td>Gas</td><td>W / S (bleibt stehen), Leertaste = 0</td><td>Linker Stick hoch/runter</td></tr>
+          <tr><td>Gieren</td><td>A / D</td><td>Linker Stick links/rechts</td></tr>
+          <tr><td>Nicken</td><td>↑ / ↓</td><td>Rechter Stick hoch/runter</td></tr>
+          <tr><td>Rollen</td><td>← / →</td><td>Rechter Stick links/rechts</td></tr>
+          <tr><td>Voller Ausschlag</td><td>Shift halten</td><td>–</td></tr>
+          <tr><td>Reset</td><td>R</td><td>Start / Y</td></tr>
+          <tr><td>Kamera FPV / 3rd</td><td>C</td><td>Select / X</td></tr>
+        </table>
+        <p>Esc = Einstellungen (Rates, Kamerawinkel, FOV, Mode 1/2) · T = Telemetrie · H = Hilfe ein/aus</p>
+        <p>Scharfschalten: Gas ganz runter. Modus: <b>Acro</b> – die Drohne hält ihre Lage, nichts stabilisiert sich von selbst.</p>
+        <p>RC-Sender per USB werden als Joystick erkannt (Standard AETR-Zuordnung, Kalibrierung folgt in Meilenstein 2).</p>
+      </div>
+      <p class="help-close">Tippen/Klicken zum Schließen</p>
     </div>
+    <div id="rotate-hint">Für die beste Steuerung das iPad ins Querformat drehen ↻</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

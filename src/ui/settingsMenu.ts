@@ -91,6 +91,12 @@ export class SettingsMenu {
             <option value="1" ${s.input.stickMode === 1 ? 'selected' : ''}>Mode 1 (Gas rechts)</option>
           </select></label>
           <label>Totzone Gamepad <input type="range" data-k="input.deadband" min="0" max="0.2" step="0.01" value="${s.input.deadband}"><output></output></label>
+          <label>Touch-Sticks <select data-k="input.touchControls">
+            <option value="auto" ${s.input.touchControls === 'auto' ? 'selected' : ''}>Automatisch (Tablet)</option>
+            <option value="on" ${s.input.touchControls === 'on' ? 'selected' : ''}>Immer an</option>
+            <option value="off" ${s.input.touchControls === 'off' ? 'selected' : ''}>Aus</option>
+          </select></label>
+          <label>Touch-Stickgröße <input type="range" data-k="input.touchStickSize" min="45" max="130" step="1" value="${s.input.touchStickSize}"><output></output></label>
         </section>
         <section>
           <h2>Grafik</h2>
@@ -100,7 +106,7 @@ export class SettingsMenu {
         </section>
         <div class="menu-buttons">
           <button data-act="defaults">Standardwerte</button>
-          <button data-act="close" class="primary">Weiter fliegen (Esc)</button>
+          <button data-act="close" class="primary">Weiter fliegen</button>
         </div>
       </div>`;
 

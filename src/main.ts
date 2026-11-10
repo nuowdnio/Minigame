@@ -4,8 +4,9 @@ import { PHYSICS } from './config/physics';
 import type { Settings } from './config/defaults';
 import { createCalmEnvironment } from './env/environment';
 import { Simulation } from './game/simulation';
-import { loadSettings, saveSettings } from './game/storage';
+import { hasSavedSettings, loadSettings, saveSettings } from './game/storage';
 import { InputManager } from './input/input';
+import { TouchControls, isTouchDevice } from './input/touchControls';
 import { ChaseCameraRig, FpvCameraRig, horizontalToVerticalFov } from './render/cameras';
 import { DroneMesh } from './render/droneMesh';
 import { Osd } from './ui/osd';
@@ -14,6 +15,8 @@ import { TelemetryPanel } from './ui/telemetryPanel';
 import { buildTestArena } from './world/testArena';
 
 let settings: Settings = loadSettings();
+// Tablets: beim ersten Start mittlere Grafikqualität (Akku/Wärme)
+if (!hasSavedSettings() && isTouchDevice()) settings.graphics.quality = 'medium';
 
 // --- Renderer / Szene -------------------------------------------------------
 const app = document.getElementById('app')!;
@@ -53,6 +56,13 @@ const ui = document.getElementById('ui')!;
 const osd = new Osd(ui);
 const telemetry = new TelemetryPanel(ui);
 const help = document.getElementById('help')!;
+help.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  help.classList.add('hidden');
+});
+if (isTouchDevice()) document.body.classList.add('is-touch');
+const touch = new TouchControls(ui, settings);
+input.touch = touch;
 let paused = false;
 
 const menu = new SettingsMenu(
@@ -63,6 +73,7 @@ const menu = new SettingsMenu(
     saveSettings(settings);
     sim.applySettings(settings);
     input.setSettings(settings);
+    touch.applySettings(settings);
     applyGraphics();
   },
   () => closeMenu(),
@@ -93,6 +104,23 @@ function updateCameraProjection(): void {
 window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   updateCameraProjection();
+  touch.layout();
+});
+
+// iOS Safari: Pinch-Zoom und Doppeltipp-Zoom unterbinden
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+}
+document.addEventListener(
+  'touchmove',
+  (e) => {
+    if (!(e.target as HTMLElement).closest('.menu-panel')) e.preventDefault();
+  },
+  { passive: false },
+);
+// Beim Wechsel in den Hintergrund pausieren, damit die Drohne nicht unkontrolliert weiterfliegt
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && !menu.open) openMenu();
 });
 
 // --- Hauptschleife ----------------------------------------------------------

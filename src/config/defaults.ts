@@ -40,6 +40,10 @@ export interface Settings {
     stickMode: 1 | 2;
     /** Totzone für Gamepad-Sticks (0..0.2). */
     deadband: number;
+    /** Bildschirm-Sticks: auto = nur auf Touch-Geräten (iPad, Tablet). */
+    touchControls: 'auto' | 'on' | 'off';
+    /** Radius der Touch-Sticks (px). Kleiner = empfindlicher. */
+    touchStickSize: number;
   };
   graphics: {
     quality: 'low' | 'medium' | 'high';
@@ -63,6 +67,8 @@ export const DEFAULT_SETTINGS: Settings = {
   input: {
     stickMode: 2,
     deadband: 0.03,
+    touchControls: 'auto',
+    touchStickSize: 75,
   },
   graphics: {
     quality: 'high',
