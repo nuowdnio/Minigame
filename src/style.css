@@ -1,0 +1,53 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: system-ui, sans-serif; color: #eee; }
+#app canvas { display: block; }
+#ui { position: fixed; inset: 0; pointer-events: none; }
+.hidden { display: none !important; }
+
+/* OSD */
+.osd { position: absolute; inset: 0; font-family: 'Courier New', ui-monospace, monospace; font-weight: bold;
+  font-size: clamp(14px, 2.2vw, 24px); color: #fff; text-shadow: 0 0 3px #000, 1px 1px 0 #000, -1px -1px 0 #000; letter-spacing: 1px; }
+.osd > div { position: absolute; }
+.osd-tl { top: 4%; left: 4%; }
+.osd-tr { top: 4%; right: 4%; text-align: right; }
+.osd-bl { bottom: 5%; left: 4%; }
+.osd-br { bottom: 5%; right: 4%; text-align: right; }
+.osd-tc { top: 4%; left: 50%; transform: translateX(-50%); }
+.osd-center { top: 62%; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+.osd-cross { top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.8; }
+.osd .dim { opacity: 0.75; }
+.osd .warn { color: #fff; }
+.osd .blink { animation: blink 0.8s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.1; } }
+
+/* Telemetrie */
+.telemetry { position: absolute; top: 15%; left: 4%; margin: 0; padding: 8px 10px; background: rgba(0,0,0,0.55);
+  font: 12px/1.35 ui-monospace, monospace; color: #cfe; border-radius: 4px; }
+
+/* Hilfe */
+.help { position: fixed; right: 16px; top: 50%; transform: translateY(-50%); max-width: 440px; padding: 14px 18px;
+  background: rgba(10,14,20,0.82); border: 1px solid #345; border-radius: 8px; font-size: 13px; line-height: 1.4; }
+.help h2 { margin: 0 0 8px; font-size: 16px; }
+.help table { border-collapse: collapse; width: 100%; }
+.help td, .help th { padding: 2px 6px; text-align: left; border-bottom: 1px solid #234; }
+.help p { margin: 8px 0 0; color: #bcd; }
+
+/* Menü */
+.menu { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; pointer-events: auto; }
+.menu-panel { width: min(720px, 94vw); max-height: 92vh; overflow: auto; background: #121821; border: 1px solid #2c3a4d;
+  border-radius: 10px; padding: 18px 22px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+.menu h1 { margin: 0 0 10px; font-size: 22px; }
+.menu h2 { margin: 0 0 8px; font-size: 15px; color: #8fb8ff; text-transform: uppercase; letter-spacing: 1px; }
+.menu section { padding: 10px 0; border-top: 1px solid #223; }
+.menu label { display: grid; grid-template-columns: 170px 1fr 50px; align-items: center; gap: 10px; margin: 6px 0; font-size: 14px; }
+.menu label select { grid-column: span 2; }
+.menu input[type=number] { width: 70px; background: #0b1017; color: #eee; border: 1px solid #334; border-radius: 4px; padding: 3px 5px; }
+.menu select { background: #0b1017; color: #eee; border: 1px solid #334; border-radius: 4px; padding: 4px; }
+.menu output { font-family: ui-monospace, monospace; font-size: 13px; text-align: right; }
+.rates-wrap { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.rates td, .rates th { padding: 3px 6px; font-size: 13px; text-align: left; }
+.rate-canvas { border-radius: 6px; }
+.menu-buttons { display: flex; justify-content: space-between; margin-top: 12px; }
+.menu button { background: #223042; color: #eee; border: 1px solid #3a4d66; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-size: 14px; }
+.menu button.primary { background: #2a6df0; border-color: #2a6df0; }
+.menu button:hover { filter: brightness(1.15); }

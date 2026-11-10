@@ -1,0 +1,182 @@
+import { DEFAULT_SETTINGS, type AxisRates, type Settings } from '../config/defaults';
+import { betaflightRate, maxRate } from '../fc/rates';
+
+type Axis = 'roll' | 'pitch' | 'yaw';
+const AXES: Axis[] = ['roll', 'pitch', 'yaw'];
+const AXIS_LABEL: Record<Axis, string> = { roll: 'Roll', pitch: 'Pitch', yaw: 'Yaw' };
+const AXIS_COLOR: Record<Axis, string> = { roll: '#ff6b6b', pitch: '#51cf66', yaw: '#4dabf7' };
+
+/**
+ * Einstellungsmenü (Pause): Rates mit Kurvenvorschau, Gaskurve, Kamera, Steuerung, Grafik.
+ */
+export class SettingsMenu {
+  readonly el: HTMLDivElement;
+  private canvas!: HTMLCanvasElement;
+  private settings: Settings;
+
+  constructor(
+    parent: HTMLElement,
+    initial: Settings,
+    private readonly onChange: (s: Settings) => void,
+    private readonly onClose: () => void,
+  ) {
+    this.settings = structuredClone(initial);
+    this.el = document.createElement('div');
+    this.el.className = 'menu hidden';
+    parent.appendChild(this.el);
+    this.render();
+  }
+
+  get open(): boolean {
+    return !this.el.classList.contains('hidden');
+  }
+
+  show(settings: Settings): void {
+    this.settings = structuredClone(settings);
+    this.render();
+    this.el.classList.remove('hidden');
+  }
+
+  hide(): void {
+    this.el.classList.add('hidden');
+  }
+
+  private emit(): void {
+    this.onChange(structuredClone(this.settings));
+    this.drawCurves();
+    for (const a of AXES) {
+      const e = this.el.querySelector<HTMLElement>(`[data-max="${a}"]`);
+      if (e) e.textContent = `${Math.round(maxRate(this.settings.rates[a]))}°/s`;
+    }
+  }
+
+  private render(): void {
+    const s = this.settings;
+    const rateRow = (a: Axis) => {
+      const r = s.rates[a];
+      const num = (k: keyof AxisRates, min: number, max: number, step: number) =>
+        `<input type="number" data-rate="${a}.${k}" min="${min}" max="${max}" step="${step}" value="${r[k]}">`;
+      return `<tr><td style="color:${AXIS_COLOR[a]}">${AXIS_LABEL[a]}</td>
+        <td>${num('rcRate', 0.01, 2.55, 0.01)}</td><td>${num('superRate', 0, 0.99, 0.01)}</td>
+        <td>${num('expo', 0, 1, 0.01)}</td><td data-max="${a}">${Math.round(maxRate(r))}°/s</td></tr>`;
+    };
+    this.el.innerHTML = `
+      <div class="menu-panel">
+        <h1>Einstellungen</h1>
+        <section>
+          <h2>Rates (Betaflight)</h2>
+          <div class="rates-wrap">
+            <table class="rates">
+              <tr><th></th><th>RC Rate</th><th>Super Rate</th><th>Expo</th><th>Max</th></tr>
+              ${AXES.map(rateRow).join('')}
+            </table>
+            <canvas width="220" height="160" class="rate-canvas"></canvas>
+          </div>
+          <label>Gas-Mitte <input type="range" data-k="rates.throttleMid" min="0" max="1" step="0.01" value="${s.rates.throttleMid}"><output></output></label>
+          <label>Gas-Expo <input type="range" data-k="rates.throttleExpo" min="0" max="1" step="0.01" value="${s.rates.throttleExpo}"><output></output></label>
+        </section>
+        <section>
+          <h2>Kamera</h2>
+          <label>Kamerawinkel <input type="range" data-k="camera.angle" min="0" max="50" step="1" value="${s.camera.angle}"><output></output></label>
+          <label>Sichtfeld (FOV) <input type="range" data-k="camera.fov" min="60" max="150" step="1" value="${s.camera.fov}"><output></output></label>
+          <label>Ansicht <select data-k="camera.view">
+            <option value="fpv" ${s.camera.view === 'fpv' ? 'selected' : ''}>FPV</option>
+            <option value="chase" ${s.camera.view === 'chase' ? 'selected' : ''}>Third Person</option>
+          </select></label>
+        </section>
+        <section>
+          <h2>Steuerung</h2>
+          <label>Stick-Mode <select data-k="input.stickMode" data-num>
+            <option value="2" ${s.input.stickMode === 2 ? 'selected' : ''}>Mode 2 (Gas links)</option>
+            <option value="1" ${s.input.stickMode === 1 ? 'selected' : ''}>Mode 1 (Gas rechts)</option>
+          </select></label>
+          <label>Totzone Gamepad <input type="range" data-k="input.deadband" min="0" max="0.2" step="0.01" value="${s.input.deadband}"><output></output></label>
+        </section>
+        <section>
+          <h2>Grafik</h2>
+          <label>Qualität <select data-k="graphics.quality">
+            ${['low', 'medium', 'high'].map((q) => `<option value="${q}" ${s.graphics.quality === q ? 'selected' : ''}>${{ low: 'Niedrig', medium: 'Mittel', high: 'Hoch' }[q]}</option>`).join('')}
+          </select></label>
+        </section>
+        <div class="menu-buttons">
+          <button data-act="defaults">Standardwerte</button>
+          <button data-act="close" class="primary">Weiter fliegen (Esc)</button>
+        </div>
+      </div>`;
+
+    this.canvas = this.el.querySelector('canvas')!;
+
+    this.el.querySelectorAll<HTMLInputElement>('input[data-rate]').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        const [a, k] = inp.dataset.rate!.split('.') as [Axis, keyof AxisRates];
+        const v = parseFloat(inp.value);
+        if (!Number.isFinite(v)) return;
+        this.settings.rates[a][k] = Math.max(parseFloat(inp.min), Math.min(parseFloat(inp.max), v));
+        this.emit();
+      });
+    });
+
+    this.el.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-k]').forEach((inp) => {
+      const out = inp.nextElementSibling as HTMLOutputElement | null;
+      const showValue = () => {
+        if (out && out.tagName === 'OUTPUT') out.textContent = inp.value;
+      };
+      showValue();
+      inp.addEventListener('input', () => {
+        const path = inp.dataset.k!.split('.');
+        let obj: Record<string, unknown> = this.settings as unknown as Record<string, unknown>;
+        for (let i = 0; i < path.length - 1; i++) obj = obj[path[i]] as Record<string, unknown>;
+        const key = path[path.length - 1];
+        const isNum = inp.type === 'range' || inp.hasAttribute('data-num');
+        obj[key] = isNum ? parseFloat(inp.value) : inp.value;
+        showValue();
+        this.emit();
+      });
+    });
+
+    this.el.querySelector('[data-act="defaults"]')!.addEventListener('click', () => {
+      this.settings = structuredClone(DEFAULT_SETTINGS);
+      this.render();
+      this.emit();
+    });
+    this.el.querySelector('[data-act="close"]')!.addEventListener('click', () => this.onClose());
+    this.drawCurves();
+  }
+
+  private drawCurves(): void {
+    const c = this.canvas;
+    const g = c.getContext('2d');
+    if (!g) return;
+    const w = c.width,
+      h = c.height;
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fillRect(0, 0, w, h);
+    const top = Math.max(200, ...AXES.map((a) => maxRate(this.settings.rates[a])));
+    g.strokeStyle = 'rgba(255,255,255,0.15)';
+    g.fillStyle = 'rgba(255,255,255,0.5)';
+    g.font = '10px monospace';
+    for (let d = 0; d <= top; d += 200) {
+      const y = h - (d / top) * (h - 10);
+      g.beginPath();
+      g.moveTo(0, y);
+      g.lineTo(w, y);
+      g.stroke();
+      g.fillText(`${d}`, 2, y - 2);
+    }
+    for (const a of AXES) {
+      g.strokeStyle = AXIS_COLOR[a];
+      g.lineWidth = 2;
+      g.beginPath();
+      for (let i = 0; i <= 100; i++) {
+        const x = i / 100;
+        const r = betaflightRate(x, this.settings.rates[a]);
+        const px = x * w;
+        const py = h - (r / top) * (h - 10);
+        if (i === 0) g.moveTo(px, py);
+        else g.lineTo(px, py);
+      }
+      g.stroke();
+    }
+  }
+}

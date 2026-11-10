@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FPV Racer</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="ui"></div>
+    <div id="help" class="help">
+      <h2>Steuerung</h2>
+      <table>
+        <tr><th></th><th>Tastatur (Notlösung)</th><th>Gamepad (Mode 2)</th></tr>
+        <tr><td>Gas</td><td>W / S (bleibt stehen), Leertaste = 0</td><td>Linker Stick hoch/runter</td></tr>
+        <tr><td>Gieren</td><td>A / D</td><td>Linker Stick links/rechts</td></tr>
+        <tr><td>Nicken</td><td>↑ / ↓</td><td>Rechter Stick hoch/runter</td></tr>
+        <tr><td>Rollen</td><td>← / →</td><td>Rechter Stick links/rechts</td></tr>
+        <tr><td>Voller Ausschlag</td><td>Shift halten</td><td>–</td></tr>
+        <tr><td>Reset</td><td>R</td><td>Start / Y</td></tr>
+        <tr><td>Kamera FPV / 3rd</td><td>C</td><td>Select / X</td></tr>
+      </table>
+      <p>Esc = Einstellungen (Rates, Kamerawinkel, FOV, Mode 1/2) · T = Telemetrie · H = Hilfe ein/aus</p>
+      <p>Scharfschalten: Gas ganz runter. Modus: <b>Acro</b> – die Drohne hält ihre Lage, nichts stabilisiert sich von selbst.</p>
+      <p>RC-Sender per USB werden als Joystick erkannt (Standard AETR-Zuordnung, Kalibrierung folgt in Meilenstein 2).</p>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

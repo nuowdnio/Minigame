@@ -1,0 +1,173 @@
+/**
+ * Zentrale Physik-Konfiguration der Drohne.
+ *
+ * Alle Werte in SI-Einheiten (m, kg, s, N, A, V), sofern nicht anders angegeben.
+ * Die Standardwerte entsprechen einem typischen 5"-Freestyle/Race-Quad auf 6S.
+ *
+ * Koordinatensystem (wie Three.js): Y = oben, -Z = vorne, +X = rechts.
+ * Körper-Achsen der Drohne: x = rechts, y = oben, z = hinten.
+ */
+
+export interface Vec3Like {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface MotorLayoutEntry {
+  /** Position der Motorachse im Körper-System (m). */
+  position: Vec3Like;
+  /** Drehrichtung von oben gesehen: +1 = im Uhrzeigersinn (CW), -1 = gegen den Uhrzeigersinn (CCW). */
+  spin: 1 | -1;
+  name: string;
+}
+
+export interface ContactPoint {
+  position: Vec3Like;
+  radius: number;
+}
+
+export const PHYSICS = {
+  /** Physik- und Flight-Controller-Takt (Hz). */
+  simHz: 1000,
+  gravity: 9.81,
+
+  air: {
+    /** Luftdichte auf Meereshöhe bei 15 °C (kg/m³). */
+    seaLevelDensity: 1.225,
+    /** Skalenhöhe der barometrischen Höhenformel (m). */
+    scaleHeight: 8500,
+  },
+
+  frame: {
+    /** Abfluggewicht inkl. Akku und Kamera (kg). */
+    mass: 0.65,
+    /** Hauptträgheitsmomente um die Körperachsen (kg·m²): x = Nick, y = Gier, z = Roll. */
+    inertia: { x: 0.0022, y: 0.004, z: 0.0019 },
+    /**
+     * Motor-Layout (Quad X, "Props in", Betaflight-Standard).
+     * 220 mm Diagonal-Achsabstand -> ±0.078 m in x und z.
+     */
+    motors: [
+      { name: 'RR', position: { x: 0.078, y: 0.0, z: 0.078 }, spin: 1 },
+      { name: 'FR', position: { x: 0.078, y: 0.0, z: -0.078 }, spin: -1 },
+      { name: 'RL', position: { x: -0.078, y: 0.0, z: 0.078 }, spin: -1 },
+      { name: 'FL', position: { x: -0.078, y: 0.0, z: -0.078 }, spin: 1 },
+    ] as MotorLayoutEntry[],
+    /** Kollisionspunkte (Kugeln) im Körper-System, für Boden-/Hinderniskontakt. */
+    contactPoints: [
+      { position: { x: 0.078, y: -0.012, z: 0.078 }, radius: 0.018 },
+      { position: { x: 0.078, y: -0.012, z: -0.078 }, radius: 0.018 },
+      { position: { x: -0.078, y: -0.012, z: 0.078 }, radius: 0.018 },
+      { position: { x: -0.078, y: -0.012, z: -0.078 }, radius: 0.018 },
+      { position: { x: 0.0, y: -0.02, z: 0.0 }, radius: 0.02 },
+      { position: { x: 0.0, y: 0.045, z: 0.01 }, radius: 0.025 }, // Akku oben
+      { position: { x: 0.0, y: 0.015, z: -0.06 }, radius: 0.02 }, // Kamera vorne
+    ] as ContactPoint[],
+  },
+
+  motor: {
+    /** Motor-KV (U/min pro Volt). */
+    kv: 1850,
+    /** Anteil der Leerlaufdrehzahl, der unter Volllast mit Propeller erreicht wird. */
+    loadFactor: 0.72,
+    /** Statischer Maximalschub pro Motor bei voll geladenem Akku auf Meereshöhe (N). */
+    maxThrust: 14.0,
+    /** Verhältnis Propeller-Drehmoment / Schub (m). Bestimmt die Gier-Autorität. */
+    torqueToThrust: 0.015,
+    /** Zeitkonstante beim Hochdrehen (s). */
+    spinUpTau: 0.018,
+    /** Zeitkonstante beim Herunterdrehen (s), mit aktivem Bremsen (Damped Light). */
+    spinDownTau: 0.028,
+    /** Leerlauf-Ausgabe im scharfen Zustand (Anteil, wie Betaflight "dshot_idle_value"). */
+    idle: 0.055,
+    /** Trägheitsmoment von Glocke + Propeller (kg·m²), erzeugt Gier-Reaktionsmoment beim Beschleunigen. */
+    rotorInertia: 6e-6,
+    /** Elektrisch -> mechanischer Wirkungsgrad (Motor + ESC). */
+    efficiency: 0.7,
+    /** Propeller-Durchmesser (m), 5". */
+    propDiameter: 0.127,
+    /** Propeller-Steigung (m pro Umdrehung), 4.3". */
+    propPitch: 0.109,
+    /** Max. Schubfaktor bei Anströmung von unten (Sinkflug), Begrenzung des Inflow-Modells. */
+    maxInflowGain: 1.15,
+    /**
+     * Geschwindigkeit ohne Schub als Vielfaches der geometrischen Pitch-Speed.
+     * Real meist 1.1–1.4, da der Propeller auch bei v = Pitch-Speed noch Schub erzeugt.
+     */
+    zeroThrustSpeedFactor: 1.3,
+  },
+
+  battery: {
+    cells: 6,
+    capacityMah: 1300,
+    /** Ohmscher Innenwiderstand des gesamten Packs inkl. Kabel (Ω). */
+    internalResistance: 0.028,
+    /** Polarisationswiderstand (Ω) – langsamer Anteil des Spannungseinbruchs. */
+    polarizationResistance: 0.012,
+    /** Zeitkonstante der Polarisation (s). */
+    polarizationTau: 3.0,
+    /** Grundverbrauch von FC, VTX, Kamera (A). */
+    idleCurrent: 0.6,
+    /** Start-Ladezustand (0..1). */
+    startSoc: 1.0,
+    /**
+     * Leerlaufspannung pro Zelle über dem Ladezustand (LiPo-Kennlinie).
+     * Paare [SoC, Volt], aufsteigend sortiert.
+     */
+    ocvCurve: [
+      [0.0, 3.27],
+      [0.05, 3.45],
+      [0.1, 3.6],
+      [0.2, 3.7],
+      [0.3, 3.75],
+      [0.4, 3.79],
+      [0.5, 3.82],
+      [0.6, 3.87],
+      [0.7, 3.93],
+      [0.8, 4.0],
+      [0.9, 4.1],
+      [1.0, 4.2],
+    ] as [number, number][],
+  },
+
+  aero: {
+    /** Linearer Luftwiderstand pro Körperachse (N pro m/s). */
+    linearDrag: { x: 0.015, y: 0.02, z: 0.015 },
+    /**
+     * Quadratischer Widerstand: Cd·A pro Körperachse (m²).
+     * Kraft = 0.5 · ρ · CdA · v². Die Oberseite (y) ist deutlich größer als die Front.
+     */
+    dragArea: { x: 0.01, y: 0.022, z: 0.008 },
+    /**
+     * Rotor-Widerstand ("H-Force"/Blade Flapping): seitliche Anströmung der drehenden
+     * Propeller erzeugt eine Kraft proportional zu Geschwindigkeit und Drehzahl.
+     * N pro (m/s) pro Motor bei voller Drehzahl.
+     */
+    rotorDrag: 0.025,
+    /** Aerodynamische Rotationsdämpfung (N·m pro rad/s). */
+    angularDrag: 0.0004,
+    groundEffect: {
+      enabled: true,
+      /** Maximaler Schubgewinn direkt über dem Boden. */
+      maxGain: 1.25,
+    },
+  },
+
+  contact: {
+    /** Stoßzahl beim Aufprall (0 = plastisch, 1 = voll elastisch). */
+    restitution: 0.25,
+    /** Gleitreibungskoeffizient. */
+    friction: 0.6,
+    /** Anteil der Eindringtiefe, der pro Schritt korrigiert wird. */
+    positionCorrection: 0.6,
+    iterations: 3,
+  },
+
+  gyro: {
+    /** Gyro-Rauschen (Standardabweichung, deg/s). */
+    noise: 0.15,
+  },
+};
+
+export type PhysicsConfig = typeof PHYSICS;
