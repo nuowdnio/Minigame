@@ -106,6 +106,8 @@ export class Motor {
   readonly kT: number;
   readonly kQ: number;
   readonly k: number;
+  /** Motorkonstante bei aktueller Temperatur (Magnete werden warm schwächer, ca. −0.12 %/K). */
+  kEff: number;
 
   constructor(
     readonly params: MotorParams,
@@ -114,6 +116,7 @@ export class Motor {
     this.kT = thrustCoefficient(params, fullVoltage);
     this.kQ = this.kT * params.torqueToThrust;
     this.k = motorConstant(params.kv);
+    this.kEff = this.k;
   }
 
   reset(ambientC = 25): void {
@@ -130,6 +133,7 @@ export class Motor {
     this.obstruction = 0;
     this.motorTemp = ambientC;
     this.escTemp = ambientC;
+    this.kEff = this.k;
   }
 
   get working(): boolean {
@@ -146,7 +150,8 @@ export class Motor {
    */
   update(command: number, voltage: number, dt: number, densityRatio = 1, torqueGain = 1, ambientC = 25, airspeed = 0): void {
     const p = this.params;
-    const k = this.k;
+    this.kEff = this.k * Math.max(0.8, 1 - 0.0012 * (this.motorTemp - 25));
+    const k = this.kEff;
     const cmd = this.working ? Math.max(0, Math.min(1, command)) : 0;
 
     // Strom aus Klemmenspannung und Gegen-EMK; ein ausgeschalteter ESC (cmd 0) lässt den Motor frei drehen.
@@ -241,7 +246,7 @@ export function solveBusVoltage(
     if (d <= 0) continue;
     const r = m.params.windingResistance;
     a += (d * d) / r;
-    b += (d * m.k * m.omega) / r;
+    b += (d * m.kEff * m.omega) / r;
   }
   const v = (sourceVoltage - internalResistance * idleCurrent + internalResistance * b) / (1 + internalResistance * a);
   return Math.max(0, Math.min(sourceVoltage, v));

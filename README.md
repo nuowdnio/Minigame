@@ -79,6 +79,31 @@ Das alte Testgelände ist im Menü weiterhin wählbar. Drohnen starten auf dem M
 Abgebrochene Teile fliegen als Trümmer weiter, durchgebrannte Motoren rauchen. Meldungen erscheinen im OSD,
 der Zustand aller Bauteile steht in der Telemetrie. Schadensmodell im Menü: Realistisch / Robust / Aus.
 
+## Fahrverhalten je Modell
+
+Jede Drohne hat eigene Physik **und** ein eigenes Regler-Setup (Rates, PID, Feedforward, Filter, TPA,
+Thrust Linearization, Spannungskompensation) – wie ein echter Pilot sie für sein Modell einstellen würde.
+Gemessen in der Simulation:
+
+| Modell | Schub/Gewicht | max. Rollrate | 360°-Flip | Steigen nach 1 s Vollgas | Spitze |
+|---|---|---|---|---|---|
+| Tiny Whoop | 3.8 | ~640 °/s | 0.60 s | 7 m/s | 44 km/h |
+| Cinewhoop 3" | 4.2 | ~300 °/s | 1.26 s | 13 m/s | 74 km/h |
+| Freestyle 5" | 8.8 | ~680 °/s | 0.56 s | 29 m/s | 150 km/h |
+| **Racer 5"** | **12** | **~970 °/s** | **0.40 s** | **39 m/s** | **175 km/h** |
+| Long Range 7" | 7.4 | ~430 °/s | 0.93 s | 9 m/s (Li-Ion) | 117 km/h |
+| Sprengstoff-Drohne 7" | 6.2 | ~360 °/s | 1.09 s | 19 m/s | 134 km/h |
+
+Die Rates lassen sich im Menü **je Modell** anpassen („Standard-Rates dieses Modells“ setzt zurück).
+
+## Sprengstoff-Drohne
+
+7"-Drohne mit Sprengladung unter dem Rahmen (schwer, träge, tiefer Schwerpunkt). Der Zünder ist am Boden
+gesichert und wird nach 1.5 s Flug scharf (OSD: „ZÜNDER SCHARF“). Fliegt sie in ein **Auto** oder schlägt
+hart auf, explodiert sie: Lichtblitz, Feuerball, Druckwelle, Splitter, Brandfleck, Rauchsäule. Autos im
+Wirkradius (7 m) werden hochgeschleudert und bleiben als brennende Wracks liegen. Im FPV-Bild bricht das
+Video ab („KEIN SIGNAL“), in der Verfolgeransicht sieht man die Explosion. Reset stellt alles wieder her.
+
 ## Fluggeräte
 
 Auswahl im Menü (⚙ / Esc → Fluggerät). Jedes Gerät hat eigene Physikwerte und eigenes Regler-Tuning.
@@ -86,10 +111,11 @@ Auswahl im Menü (⚙ / Esc → Fluggerät). Jedes Gerät hat eigene Physikwerte
 | Drohnen | | Flugzeuge | |
 |---|---|---|---|
 | Tiny Whoop 65 mm | 1S, 32 g, Ducts | Trainer (Hochdecker) | 1.4 m, Bugfahrwerk, Pistenstart |
-| Cinewhoop 3" | 4S, 300 g, Ducts | FPV-Nurflügler | 1.0 m, Druckpropeller, Handstart |
+| Cinewhoop 3" | 4S, 420 g mit Kamera, Ducts | FPV-Nurflügler | 1.0 m, Druckpropeller, Handstart |
 | Freestyle 5" | 6S, 650 g | Segler 2 m | Elektrosegler, Handstart, Thermik |
-| Racer 5" | 6S, 540 g | | |
+| Racer 5" | 6S, 470 g | | |
 | Long Range 7" | 6S Li-Ion, 1050 g | | |
+| Sprengstoff-Drohne 7" | 6S, 1450 g, Sprengladung | | |
 
 Flugmodi Flugzeug: **Manuell** (Sticks direkt auf die Ruder), **Stabilisiert** (Kreisel dämpft Böen),
 **Angle** (richtet sich selbst auf – ideal für Touch). Handstart: Modell wird gehalten, bis Gas gegeben wird.
@@ -111,6 +137,10 @@ Sticks → Betaflight-Rates → Raten-PID (P, I mit I-Term-Relax, D auf Messung,
 - Reaktionsmoment aus Propeller-Drehmoment und Rotorbeschleunigung; Ducts erhöhen den Schub.
 - **Translational Lift:** Vorwärtsfahrt erhöht den Luftdurchsatz der Propeller.
 - **Flugmodi:** Acro, Horizon, Angle (Betaflight-artige Selbststabilisierung).
+- **Flight-Controller-Funktionen wie Betaflight:** TPA (P/D-Abschwächung bei hohem Gas), Thrust Linearization,
+  Spannungskompensation (gleiches Gefühl bei vollem und leerem Akku), Filter und Feedforward je Modell.
+- **Kreiselmoment der Rotoren**, temperaturabhängige Motorkonstante (heiße Magnete → weniger Drehmoment),
+  Rotor-Widerstand greift an den Propellernaben an (aufrichtendes Nickmoment bei schneller Vorwärtsfahrt).
 - Propeller: Schubverlust bei axialer Anströmung, Rotationsanteil ω × r, Rotor-Widerstand ("H-Force").
 - **Propwash/Wirbelringstadium:** Sinken in die eigene Abströmung → Schubverlust + unruhiger Schub je Motor.
 - Bodeneffekt (Cheeseman–Bennett), Luftwiderstand linear + quadratisch je Körperachse.

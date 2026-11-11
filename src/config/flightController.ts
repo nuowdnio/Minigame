@@ -45,6 +45,16 @@ export const FLIGHT_CONTROLLER = {
   angleLimit: 55,
   angleStrength: 5,
   angleMaxRate: 400,
+  /**
+   * TPA (Throttle PID Attenuation): oberhalb des Breakpoints werden P und D linear bis auf
+   * (1 − tpaRate) bei Vollgas reduziert – verhindert Schwingen bei hoher Drehzahl.
+   */
+  tpaRate: 0,
+  tpaBreakpoint: 0.5,
+  /** Thrust Linearization (0..0.5): hebt kleine Motorausgaben an (Schub ∝ ω²). */
+  thrustLinear: 0,
+  /** Spannungskompensation (0..1): gleicht den Schubverlust durch Spannungssag aus. */
+  vbatSagComp: 0,
   /** Gas unterhalb dessen nach einem Reset automatisch scharf geschaltet wird. */
   armThrottleThreshold: 0.05,
 };

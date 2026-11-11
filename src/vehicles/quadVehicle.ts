@@ -22,6 +22,8 @@ export class QuadVehicle implements Vehicle {
   damageMode: DamageMode;
   private readonly gyro: GyroRates = { roll: 0, pitch: 0, yaw: 0 };
   private readonly zero = [0, 0, 0, 0];
+  /** Flugzeit seit dem Abheben (für den Zünder der Nutzlast). */
+  private airTime = 0;
 
   constructor(
     readonly id: string,
@@ -30,9 +32,20 @@ export class QuadVehicle implements Vehicle {
     dt: number,
   ) {
     this.quad = new Quad(preset.physics);
+    const t = preset.tune;
     this.fc = new FlightController(
-      { ...FLIGHT_CONTROLLER, pid: structuredClone(preset.pid) },
-      settings.rates,
+      {
+        ...FLIGHT_CONTROLLER,
+        pid: structuredClone(preset.pid),
+        tpaRate: t.tpaRate,
+        tpaBreakpoint: t.tpaBreakpoint,
+        thrustLinear: t.thrustLinear,
+        vbatSagComp: t.vbatSagComp,
+        gyroLowpassHz: t.gyroLowpassHz,
+        dtermLowpassHz: t.dtermLowpassHz,
+        feedforwardLowpassHz: t.feedforwardLowpassHz,
+      },
+      settings.rateProfiles[id] ?? structuredClone(t.rates),
       preset.physics.frame.motors,
       dt,
     );
@@ -60,7 +73,14 @@ export class QuadVehicle implements Vehicle {
     return this.fc.mode.toUpperCase();
   }
   get statusHint(): string {
-    return this.damage.destroyed ? 'ZERSTÖRT – RESET (R / ↺)' : '';
+    if (this.damage.destroyed) return 'ZERSTÖRT – RESET (R / ↺)';
+    if (this.preset.payload) return this.fuseArmed ? 'ZÜNDER SCHARF' : 'ZÜNDER GESICHERT';
+    return '';
+  }
+
+  /** Zünder der Sprengladung ist scharf (nach einigen Sekunden Flug). */
+  get fuseArmed(): boolean {
+    return !!this.preset.payload && this.airTime >= this.preset.payload.armTime;
   }
 
   reset(position: Vector3, yaw: number, ambientC: number): void {
@@ -69,6 +89,7 @@ export class QuadVehicle implements Vehicle {
     this.quad.reset(new Vector3(position.x, position.y - lowest + 0.002, position.z), yaw, ambientC);
     this.fc.reset();
     this.damage.reset();
+    this.airTime = 0;
   }
 
   step(dt: number, sticks: Sticks, env: Environment, time: number): void {
@@ -83,8 +104,41 @@ export class QuadVehicle implements Vehicle {
     const att = this.fc.mode === 'acro' ? undefined : attitude(q.body.orientation);
     let out = this.fc.update(sticks, this.gyro, q.telemetry.onGround, att);
     if (this.damage.destroyed) out = this.zero;
+    if (this.damage.vaporized) {
+      // nach der Explosion bleibt nichts Flugfähiges übrig: Physik anhalten
+      q.body.velocity.set(0, 0, 0);
+      q.body.angularVelocity.set(0, 0, 0);
+      return;
+    }
     q.step(dt, out, env, time);
     this.evaluateDamage(dt);
+    this.checkPayload(dt);
+  }
+
+  /** Sprengladung: zündet bei Kontakt mit einem Auto oder bei hartem Einschlag. */
+  private checkPayload(dt: number): void {
+    const pl = this.preset.payload;
+    if (!pl || this.damage.vaporized) return;
+    const t = this.quad.telemetry;
+    if (this.fc.armed && !t.onGround) this.airTime += dt;
+    if (!this.fuseArmed) return;
+    const tags = t.pointTag ?? [];
+    const impacts = t.pointImpact ?? [];
+    const touching = t.pointTouching ?? [];
+    let carId: number | null = null;
+    let trigger = false;
+    for (let i = 0; i < tags.length; i++) {
+      const tag = tags[i];
+      if (touching[i] && tag && tag.kind === 'car') {
+        carId = tag.id;
+        trigger = true;
+      }
+      if ((impacts[i] ?? 0) > pl.impactTrigger) trigger = true;
+    }
+    if (this.damage.destroyed && !this.damage.vaporized) trigger = true; // Absturz zündet ebenfalls
+    if (trigger) {
+      this.damage.explode({ position: this.quad.body.position.clone(), radius: pl.blastRadius, carId });
+    }
   }
 
   /** Schäden aus Kontakten, Propellerschleifen und Überlast bestimmen. */
@@ -145,7 +199,7 @@ export class QuadVehicle implements Vehicle {
   }
 
   applySettings(settings: Settings): void {
-    this.fc.rates = settings.rates;
+    this.fc.rates = settings.rateProfiles[this.id] ?? structuredClone(this.preset.tune.rates);
     this.fc.mode = settings.flightMode;
     this.damageMode = settings.damage;
   }

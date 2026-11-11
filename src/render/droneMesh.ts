@@ -58,6 +58,32 @@ export class DroneMesh {
     lens.position.set(0, 0.015 * s, -0.067 * s);
     this.root.add(lens);
 
+    // Nutzlast (Sprengladung) unter dem Rahmen
+    if (vis.payload) {
+      const can = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.035, 0.035, 0.16, 16),
+        new THREE.MeshStandardMaterial({ color: 0xb71c1c, roughness: 0.6 }),
+      );
+      can.rotation.x = Math.PI / 2;
+      can.position.set(0, -0.06, -0.03);
+      this.root.add(can);
+      const stripe = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.036, 0.036, 0.03, 16),
+        new THREE.MeshStandardMaterial({ color: 0xffd600, roughness: 0.6 }),
+      );
+      stripe.rotation.x = Math.PI / 2;
+      stripe.position.set(0, -0.06, -0.03);
+      this.root.add(stripe);
+      for (const x of [-0.03, 0.03]) {
+        const strap = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.06, 0.012), carbon);
+        strap.position.set(x, -0.03, -0.03);
+        this.root.add(strap);
+      }
+      const led = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2200 }));
+      led.position.set(0, -0.06, -0.115);
+      this.root.add(led);
+    }
+
     const r = preset.physics.motor.propDiameter / 2;
     const bladeGeom = new THREE.BoxGeometry(r * 2, Math.max(0.0008, 0.002 * s), Math.max(0.004, 0.012 * (r / 0.0635)));
     const discGeom = new THREE.CircleGeometry(r, 32);

@@ -61,7 +61,8 @@ export class Osd {
 
     let warn = '';
     const stall = 'stall' in t ? (t as { stall: number }).stall : 0;
-    if (!v.armed) warn = 'GAS RUNTER ZUM SCHARFSCHALTEN';
+    if (v.damage.destroyed) warn = v.statusHint ?? 'ZERSTÖRT';
+    else if (!v.armed) warn = 'GAS RUNTER ZUM SCHARFSCHALTEN';
     else if (v.statusHint) warn = v.statusHint;
     else if (stall > 0.5 && !t.onGround) warn = 'STALL';
     else if (cell < 3.3 * (bat.params.ocvCurve[0][1] / 3.27)) warn = 'LAND NOW';

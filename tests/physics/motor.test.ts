@@ -20,8 +20,8 @@ describe('Motor (elektromechanisch)', () => {
   it('erreicht bei Vollgas und voller Spannung genau den Maximalschub', () => {
     const m = new Motor(P, FULL);
     spinUp(m, 1, FULL, 0.5);
-    expect(m.thrust).toBeCloseTo(P.maxThrust, 1);
-    expect(m.omega).toBeCloseTo(fullThrottleOmega(P, FULL), -1);
+    expect(m.thrust).toBeCloseTo(P.maxThrust, 0);
+    expect(Math.abs(m.omega / fullThrottleOmega(P, FULL) - 1)).toBeLessThan(0.01);
   });
 
   it('Volllastdrehzahl liegt realistisch bei 80–95 % der Leerlaufdrehzahl', () => {

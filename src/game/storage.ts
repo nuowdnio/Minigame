@@ -31,7 +31,13 @@ export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return structuredClone(DEFAULT_SETTINGS);
-    return deepMerge(structuredClone(DEFAULT_SETTINGS), JSON.parse(raw));
+    const parsed = JSON.parse(raw);
+    const merged = deepMerge(structuredClone(DEFAULT_SETTINGS), parsed);
+    // Freie Schlüssel (Rates je Modell) übernehmen, deepMerge kennt nur die Standard-Schlüssel
+    if (parsed && typeof parsed.rateProfiles === 'object' && parsed.rateProfiles) {
+      merged.rateProfiles = parsed.rateProfiles;
+    }
+    return merged;
   } catch {
     return structuredClone(DEFAULT_SETTINGS);
   }

@@ -45,13 +45,16 @@ export class RatePid {
    * @param gyro gemessene Drehrate (deg/s)
    * @param allowIterm false hält den I-Term fest (z. B. am Boden)
    */
-  update(setpoint: number, gyro: number, allowIterm = true): number {
+  /**
+   * @param pdScale Faktor auf P und D (TPA)
+   */
+  update(setpoint: number, gyro: number, allowIterm = true, pdScale = 1): number {
     const s = this.cfg.scale;
     const g = this.gains;
     const dt = this.dt;
     const error = setpoint - gyro;
 
-    const p = s.p * g.p * error;
+    const p = s.p * g.p * error * pdScale;
 
     // I-Term-Relax: Hochpass des Sollwerts, ab ~40 deg/s Abweichung kein Aufintegrieren
     const setpointLp = this.relaxFilter.apply(setpoint);
@@ -64,7 +67,7 @@ export class RatePid {
 
     const gyroRate = (gyro - this.prevGyro) / dt;
     this.prevGyro = gyro;
-    const d = -s.d * g.d * this.dFilter.apply(gyroRate);
+    const d = -s.d * g.d * this.dFilter.apply(gyroRate) * pdScale;
 
     const setpointRate = (setpoint - this.prevSetpoint) / dt;
     this.prevSetpoint = setpoint;

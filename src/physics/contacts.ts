@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import type { ContactPointDef } from '../config/physics';
-import type { CollisionWorld, ContactResult } from '../world/collision';
+import type { CollisionWorld, ContactResult, ShapeTag } from '../world/collision';
 import type { RigidBody } from './rigidbody';
 
 export type { ContactPointDef };
@@ -39,6 +39,8 @@ export interface ContactOutput {
   pointSlide?: number[];
   /** Kontaktpunkt berührt gerade etwas. */
   pointTouching?: boolean[];
+  /** Was berührt wird (z. B. ein Auto), je Kontaktpunkt. */
+  pointTag?: (ShapeTag | null)[];
 }
 
 export function buildContactPoints(defs: ContactPointDef[]): ContactPoint[] {
@@ -86,7 +88,9 @@ export function solveContacts(
     out.pointImpact = new Array(n).fill(0);
     out.pointSlide = new Array(n).fill(0);
     out.pointTouching = new Array(n).fill(false);
+    out.pointTag = new Array(n).fill(null);
   }
+  out.pointTag!.fill(null);
   out.pointImpact.fill(0);
   out.pointSlide!.fill(0);
   out.pointTouching!.fill(false);
@@ -107,6 +111,7 @@ export function solveContacts(
         if (depth > 0) body.position.addScaledVector(nrm, depth * params.positionCorrection);
         if (cp.wheel && !cp.broken) wheels++;
         out.pointTouching![pi] = true;
+        out.pointTag![pi] = c.tag ?? null;
       }
 
       body.pointVelocity(_r, _vp);

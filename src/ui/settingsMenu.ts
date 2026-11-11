@@ -1,6 +1,6 @@
-import { DEFAULT_SETTINGS, type AxisRates, type Settings } from '../config/defaults';
+import { DEFAULT_SETTINGS, type AxisRates, type RatesSettings, type Settings } from '../config/defaults';
 import { betaflightRate, maxRate } from '../fc/rates';
-import { VEHICLES, vehicleInfo } from '../vehicles/registry';
+import { VEHICLES, defaultRates, ratesFor, vehicleInfo } from '../vehicles/registry';
 import { airState } from '../env/atmosphere';
 
 type Axis = 'roll' | 'pitch' | 'yaw';
@@ -15,6 +15,8 @@ export class SettingsMenu {
   readonly el: HTMLDivElement;
   private canvas!: HTMLCanvasElement;
   private settings: Settings;
+  /** Rates des gewählten Modells (null bei Flugzeugen). */
+  private rates: RatesSettings | null = null;
 
   constructor(
     parent: HTMLElement,
@@ -49,14 +51,22 @@ export class SettingsMenu {
     this.showAir();
     for (const a of AXES) {
       const e = this.el.querySelector<HTMLElement>(`[data-max="${a}"]`);
-      if (e) e.textContent = `${Math.round(maxRate(this.settings.rates[a]))}°/s`;
+      if (e && this.rates) e.textContent = `${Math.round(maxRate(this.rates[a]))}°/s`;
     }
+  }
+
+  /** Geänderte Rates als Profil des aktuellen Modells speichern. */
+  private storeRates(): void {
+    if (!this.rates) return;
+    this.settings.rateProfiles = { ...this.settings.rateProfiles, [this.settings.vehicle]: structuredClone(this.rates) };
   }
 
   private render(): void {
     const s = this.settings;
+    this.rates = ratesFor(s, s.vehicle);
+    const rt = this.rates ?? defaultRates('freestyle5')!;
     const rateRow = (a: Axis) => {
-      const r = s.rates[a];
+      const r = rt[a];
       const num = (k: keyof AxisRates, min: number, max: number, step: number) =>
         `<input type="number" data-rate="${a}.${k}" min="${min}" max="${max}" step="${step}" value="${r[k]}">`;
       return `<tr><td style="color:${AXIS_COLOR[a]}">${AXIS_LABEL[a]}</td>
@@ -113,7 +123,9 @@ export class SettingsMenu {
           <p class="hint" data-air></p>
         </section>
         <section>
-          <h2>Rates (Betaflight, Drohnen)</h2>
+          <h2>Rates – ${vehicleInfo(s.vehicle).name}</h2>
+          ${this.rates ? '' : '<p class="hint">Rates gelten nur für Drohnen. Flugzeuge nutzen Ruderausschläge mit Expo.</p>'}
+          <div ${this.rates ? '' : 'class="hidden"'}>
           <div class="rates-wrap">
             <table class="rates">
               <tr><th></th><th>RC Rate</th><th>Super Rate</th><th>Expo</th><th>Max</th></tr>
@@ -121,8 +133,10 @@ export class SettingsMenu {
             </table>
             <canvas width="220" height="160" class="rate-canvas"></canvas>
           </div>
-          <label>Gas-Mitte <input type="range" data-k="rates.throttleMid" min="0" max="1" step="0.01" value="${s.rates.throttleMid}"><output></output></label>
-          <label>Gas-Expo <input type="range" data-k="rates.throttleExpo" min="0" max="1" step="0.01" value="${s.rates.throttleExpo}"><output></output></label>
+          <label>Gas-Mitte <input type="range" data-thr="throttleMid" min="0" max="1" step="0.01" value="${rt.throttleMid}"><output></output></label>
+          <label>Gas-Expo <input type="range" data-thr="throttleExpo" min="0" max="1" step="0.01" value="${rt.throttleExpo}"><output></output></label>
+          <div class="menu-buttons"><button data-act="rates-default">Standard-Rates dieses Modells</button></div>
+          </div>
         </section>
         <section>
           <h2>Kamera</h2>
@@ -165,8 +179,20 @@ export class SettingsMenu {
       inp.addEventListener('input', () => {
         const [a, k] = inp.dataset.rate!.split('.') as [Axis, keyof AxisRates];
         const v = parseFloat(inp.value);
-        if (!Number.isFinite(v)) return;
-        this.settings.rates[a][k] = Math.max(parseFloat(inp.min), Math.min(parseFloat(inp.max), v));
+        if (!Number.isFinite(v) || !this.rates) return;
+        this.rates[a][k] = Math.max(parseFloat(inp.min), Math.min(parseFloat(inp.max), v));
+        this.storeRates();
+        this.emit();
+      });
+    });
+    this.el.querySelectorAll<HTMLInputElement>('input[data-thr]').forEach((inp) => {
+      const out = inp.nextElementSibling as HTMLOutputElement | null;
+      if (out) out.textContent = inp.value;
+      inp.addEventListener('input', () => {
+        if (!this.rates) return;
+        this.rates[inp.dataset.thr as 'throttleMid' | 'throttleExpo'] = parseFloat(inp.value);
+        if (out) out.textContent = inp.value;
+        this.storeRates();
         this.emit();
       });
     });
@@ -185,11 +211,8 @@ export class SettingsMenu {
         const isNum = inp.type === 'range' || inp.hasAttribute('data-num');
         obj[key] = isNum ? parseFloat(inp.value) : inp.value;
         showValue();
-        if (key === 'vehicle') {
-          const d = this.el.querySelector<HTMLElement>('[data-desc]');
-          if (d) d.textContent = vehicleInfo(inp.value).description;
-        }
         this.emit();
+        if (key === 'vehicle') this.render(); // Rates des neuen Modells anzeigen
       });
     });
 
@@ -199,6 +222,13 @@ export class SettingsMenu {
       this.emit();
     });
     this.el.querySelector('[data-act="close"]')!.addEventListener('click', () => this.onClose());
+    this.el.querySelector('[data-act="rates-default"]')?.addEventListener('click', () => {
+      const rp = { ...this.settings.rateProfiles };
+      delete rp[this.settings.vehicle];
+      this.settings.rateProfiles = rp;
+      this.emit();
+      this.render();
+    });
     this.drawCurves();
     this.showAir();
   }
@@ -226,7 +256,8 @@ export class SettingsMenu {
     g.clearRect(0, 0, w, h);
     g.fillStyle = 'rgba(0,0,0,0.35)';
     g.fillRect(0, 0, w, h);
-    const top = Math.max(200, ...AXES.map((a) => maxRate(this.settings.rates[a])));
+    const rt = this.rates ?? defaultRates('freestyle5')!;
+    const top = Math.max(200, ...AXES.map((a) => maxRate(rt[a])));
     g.strokeStyle = 'rgba(255,255,255,0.15)';
     g.fillStyle = 'rgba(255,255,255,0.5)';
     g.font = '10px monospace';
@@ -244,7 +275,7 @@ export class SettingsMenu {
       g.beginPath();
       for (let i = 0; i <= 100; i++) {
         const x = i / 100;
-        const r = betaflightRate(x, this.settings.rates[a]);
+        const r = betaflightRate(x, rt[a]);
         const px = x * w;
         const py = h - (r / top) * (h - 10);
         if (i === 0) g.moveTo(px, py);

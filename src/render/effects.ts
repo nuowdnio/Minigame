@@ -148,6 +148,18 @@ export class SmokeSystem {
     }
   }
 
+  /** Rauchwolke auf einmal (z. B. Explosion). */
+  burst(pos: THREE.Vector3, count: number, scale: number): void {
+    for (let i = 0; i < count; i++) {
+      this.spawn(pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2)), scale);
+      const p = this.active[this.active.length - 1];
+      if (p) {
+        p.vel.set((Math.random() - 0.5) * 6, 2 + Math.random() * 4, (Math.random() - 0.5) * 6);
+        p.life = 3 + Math.random() * 3;
+      }
+    }
+  }
+
   private spawn(pos: THREE.Vector3, scale: number): void {
     if (this.active.length > 300) return;
     const p =

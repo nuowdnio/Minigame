@@ -1,11 +1,19 @@
 import { Vector3 } from 'three';
 
+/** Kennzeichnung einer Form (z. B. welches Auto getroffen wurde). */
+export interface ShapeTag {
+  kind: 'car';
+  id: number;
+}
+
 /** Ergebnis einer Kontaktabfrage für eine Kugel. */
 export interface ContactResult {
   /** Kontaktnormale (Welt), zeigt vom Hindernis weg. */
   normal: Vector3;
   /** Eindringtiefe (m), > 0 bei Kontakt. */
   depth: number;
+  /** Getroffene Form (null = Boden oder ohne Kennzeichnung). */
+  tag?: ShapeTag | null;
 }
 
 /** Statische Welt-Geometrie für die Fluggeräte-Physik. */
@@ -65,6 +73,8 @@ interface Entry {
   aabb: Box;
   /** Zählt als Windhindernis (Gebäude). */
   windBlocking: boolean;
+  tag: ShapeTag | null;
+  enabled: boolean;
 }
 
 const _local = { x: 0, y: 0, z: 0 };
@@ -95,10 +105,11 @@ export class StaticWorld implements CollisionWorld {
     return (ix + 4096) * 8192 + (iz + 4096);
   }
 
-  add(shape: Shape, windBlocking = false): void {
+  /** Form hinzufügen; gibt eine Kennung zurück (für setEnabled). */
+  add(shape: Shape, windBlocking = false, tag: ShapeTag | null = null): number {
     const aabb = shapeAabb(shape);
     const idx = this.entries.length;
-    this.entries.push({ shape, aabb, windBlocking });
+    this.entries.push({ shape, aabb, windBlocking, tag, enabled: true });
     this.stamp.push(-1);
     const c = this.cell;
     for (let ix = Math.floor(aabb.min.x / c); ix <= Math.floor(aabb.max.x / c); ix++) {
@@ -109,12 +120,18 @@ export class StaticWorld implements CollisionWorld {
         list.push(idx);
       }
     }
+    return idx;
+  }
+
+  /** Form ein-/ausschalten (z. B. zerstörte Objekte). */
+  setEnabled(id: number, enabled: boolean): void {
+    if (this.entries[id]) this.entries[id].enabled = enabled;
   }
 
   /** Quader (Mittelpunkt, Größe, Drehung um die Hochachse). */
-  addBox(center: Vector3, size: Vector3, yaw = 0, windBlocking = true): void {
+  addBox(center: Vector3, size: Vector3, yaw = 0, windBlocking = true, tag: ShapeTag | null = null): number {
     const hz = size.z / 2;
-    this.add(
+    return this.add(
       {
         kind: 'prism',
         cx: center.x,
@@ -130,6 +147,7 @@ export class StaticWorld implements CollisionWorld {
         ],
       },
       windBlocking,
+      tag,
     );
   }
 
@@ -187,6 +205,7 @@ export class StaticWorld implements CollisionWorld {
           if (this.stamp[i] === id) continue;
           this.stamp[i] = id;
           const e = this.entries[i];
+          if (!e.enabled) continue;
           const b = e.aabb;
           if (
             p.x + r < b.min.x ||
@@ -207,6 +226,7 @@ export class StaticWorld implements CollisionWorld {
     let best: ContactResult | null = null;
     let bestDepth = 0;
     const dGround = this.groundY + r - c.y;
+    out.tag = null;
     if (dGround > 0) {
       out.normal.set(0, 1, 0);
       out.depth = dGround;
@@ -219,6 +239,7 @@ export class StaticWorld implements CollisionWorld {
         bestDepth = res.depth;
         out.normal.set(res.nx, res.ny, res.nz);
         out.depth = res.depth;
+        out.tag = e.tag;
         best = out;
       }
     });
@@ -231,6 +252,7 @@ export class StaticWorld implements CollisionWorld {
     const list = this.grid.get(this.key(Math.floor(p.x / c), Math.floor(p.z / c)));
     if (list) {
       for (const i of list) {
+        if (!this.entries[i].enabled) continue;
         const top = shapeTopAt(this.entries[i].shape, p.x, p.z);
         if (top !== null && p.y >= top) h = Math.min(h, p.y - top);
       }

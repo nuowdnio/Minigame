@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { CarFleet, type CarSpec } from './cars';
 import type { StaticWorld } from './collision';
 import { asphaltTexture, facadeTexture, flatRoofTexture, pavementTexture, roofTileTexture } from './textures';
 
@@ -43,6 +44,10 @@ export class CityBuilder {
   private readonly batches = new Map<MatKey, THREE.BufferGeometry[]>();
   readonly materials: Record<MatKey, THREE.Material>;
   private readonly trees: { x: number; z: number; h: number; r: number; conifer: boolean; color: THREE.Color }[] = [];
+  /** Gesammelte Autos (werden in finish() zur CarFleet). */
+  private readonly cars: CarSpec[] = [];
+  /** Zerstörbare Autos (nach finish()). */
+  fleet: CarFleet | null = null;
 
   constructor(
     readonly scene: THREE.Scene,
@@ -236,31 +241,11 @@ export class CityBuilder {
     }
   }
 
-  /** PKW (vereinfacht): Karosserie, Kabine mit Scheiben, Räder. */
+  /** PKW: wird als instanziertes, zerstörbares Auto angelegt (siehe CarFleet). */
   car(x: number, z: number, yaw: number, color: number): void {
-    const c = Math.cos(yaw),
-      s = Math.sin(yaw);
-    const at = (lx: number, lz: number): [number, number] => [x + lx * c + lz * s, z - lx * s + lz * c];
-    this.add('carPaint', new THREE.BoxGeometry(4.2, 0.75, 1.75), x, 0.65, z, yaw, color);
-    const cab = new THREE.BoxGeometry(2.2, 0.62, 1.6);
-    this.add('glass', cab, at(-0.2, 0)[0], 1.33, at(-0.2, 0)[1], yaw, 0x22303a);
-    this.add('carPaint', new THREE.BoxGeometry(2.0, 0.06, 1.55), at(-0.2, 0)[0], 1.66, at(-0.2, 0)[1], yaw, color);
-    const wheel = new THREE.CylinderGeometry(0.33, 0.33, 0.25, 12);
-    wheel.rotateX(Math.PI / 2);
-    for (const [lx, lz] of [
-      [1.35, 0.8],
-      [1.35, -0.8],
-      [-1.35, 0.8],
-      [-1.35, -0.8],
-    ]) {
-      const [wx, wz] = at(lx, lz);
-      this.add('rubber', wheel, wx, 0.33, wz, yaw, 0x1a1a1a);
-    }
-    for (const lz of [0.6, -0.6]) {
-      const [lxw, lzw] = at(2.11, lz);
-      this.add('emissive', new THREE.BoxGeometry(0.04, 0.12, 0.3), lxw, 0.75, lzw, yaw, 0xfff6d8);
-    }
-    this.collision.addBox(new THREE.Vector3(x, 0.85, z), new THREE.Vector3(4.2, 1.7, 1.8), yaw, false);
+    const id = this.cars.length;
+    this.cars.push({ x, z, yaw, color });
+    this.collision.addBox(new THREE.Vector3(x, 0.85, z), new THREE.Vector3(4.2, 1.7, 1.8), yaw, false, { kind: 'car', id });
   }
 
   /** Straßenlaterne. */
@@ -295,6 +280,7 @@ export class CityBuilder {
     }
     this.batches.clear();
     this.buildTrees();
+    this.fleet = new CarFleet(this.scene, this.cars, this.shadows);
   }
 
   private buildTrees(): void {

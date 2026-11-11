@@ -37,6 +37,8 @@ export class FlightController {
   private readonly mixer: MixerRule[];
   private readonly mixBuffer: number[];
   private readonly gyroFilters: Pt1Filter[];
+  /** Verhältnis Referenz-Zellspannung / aktuelle Zellspannung (für die Spannungskompensation). */
+  vbatRatio = 1;
   readonly filteredGyro: GyroRates = { roll: 0, pitch: 0, yaw: 0 };
 
   constructor(
@@ -127,16 +129,26 @@ export class FlightController {
       this.pids.yaw.iterm *= 0.9;
     }
 
-    const scale = cfg.scale.mixer;
-    const r = this.pids.roll.update(sp.roll, fg.roll, allowI) / scale;
-    const p = this.pids.pitch.update(sp.pitch, fg.pitch, allowI) / scale;
-    const y = (this.pids.yaw.update(sp.yaw, fg.yaw, allowI) / scale) * cfg.yawMotorsLimit;
+    // TPA: P und D oberhalb des Breakpoints abschwächen
+    const tpa =
+      1 - cfg.tpaRate * Math.max(0, Math.min(1, (throttle - cfg.tpaBreakpoint) / Math.max(0.01, 1 - cfg.tpaBreakpoint)));
+    // Spannungskompensation: gleiche Stickausschläge -> gleicher Schub, auch bei leerem Akku
+    const comp = Math.min(1.4, 1 + cfg.vbatSagComp * (this.vbatRatio - 1));
 
-    mix(this.mixer, throttle, r, p, y, this.mixBuffer, true);
+    const scale = cfg.scale.mixer;
+    const r = (this.pids.roll.update(sp.roll, fg.roll, allowI, tpa) / scale) * comp;
+    const p = (this.pids.pitch.update(sp.pitch, fg.pitch, allowI, tpa) / scale) * comp;
+    const y = (this.pids.yaw.update(sp.yaw, fg.yaw, allowI) / scale) * cfg.yawMotorsLimit * comp;
+
+    mix(this.mixer, Math.min(1, throttle * comp), r, p, y, this.mixBuffer, true);
 
     const idle = this.cfgIdle;
+    const tl = cfg.thrustLinear;
     for (let i = 0; i < this.mixBuffer.length; i++) {
-      this.motorOutputs[i] = idle + this.mixBuffer[i] * (1 - idle);
+      // Thrust Linearization: out' = out·(1+tl) − tl·out²
+      const m = this.mixBuffer[i];
+      const lin = tl > 0 ? m * (1 + tl) - tl * m * m : m;
+      this.motorOutputs[i] = idle + lin * (1 - idle);
     }
     return this.motorOutputs;
   }

@@ -41,6 +41,7 @@ export interface QuadTelemetry {
   pointImpact?: number[];
   pointSlide?: number[];
   pointTouching?: boolean[];
+  pointTag?: ({ kind: 'car'; id: number } | null)[];
 }
 
 export function createTelemetry(): QuadTelemetry {
@@ -156,7 +157,6 @@ export class Quad {
     const w = b.angularVelocity;
     const duct = cfg.motor.ductGain;
     let totalThrust = 0;
-    let rotorSpeedSum = 0;
     let loadCurrent = 0;
     let yawTorque = 0;
     let washMax = 0;
@@ -204,7 +204,6 @@ export class Quad {
       m.update(commands[i] ?? 0, voltage, dt, densityRatio, tqGain, ambientC, airspeed);
       m.computeForces(densityRatio, gain * duct, tqGain);
       totalThrust += m.thrust;
-      rotorSpeedSum += m.omega / this.omegaRef;
 
       // Schub entlang Körper-Hochachse am Motorort: τ = r × (0, T, 0)
       b.torque.x += -r.z * m.thrust;
@@ -223,12 +222,37 @@ export class Quad {
 
     // --- Luftwiderstand --------------------------------------------------
     dragForce(_vAirBody, cfg.aero.linearDrag, cfg.aero.dragArea, rho, _drag);
-    // Rotor-Widerstand (seitliche Anströmung der Propellerebene)
-    const kRotor = cfg.aero.rotorDrag * rotorSpeedSum * densityRatio;
-    _drag.x -= kRotor * _vAirBody.x;
-    _drag.z -= kRotor * _vAirBody.z;
+    // Rotor-Widerstand ("H-Force"/Blattschlagen): greift an den Propellernaben an, also über dem
+    // Schwerpunkt -> bei Vorwärtsfahrt entsteht ein aufrichtendes Nickmoment wie bei echten Multicoptern.
+    const hubH = 0.02 * (cfg.motor.propDiameter / 0.127);
+    for (let i = 0; i < this.motors.length; i++) {
+      const m = this.motors[i];
+      const r = this.motorPositions[i];
+      const k = cfg.aero.rotorDrag * (m.omega / this.omegaRef) * densityRatio * m.health;
+      // lokale Anströmung an der Nabe: v + ω × r_hub (nur Anteile in der Rotorebene)
+      const ry = r.y + hubH;
+      const vx = _vAirBody.x + (w.y * r.z - w.z * ry);
+      const vz = _vAirBody.z + (w.x * ry - w.y * r.x);
+      const fx = -k * vx;
+      const fz = -k * vz;
+      _drag.x += fx;
+      _drag.z += fz;
+      // Moment r × F mit F = (fx, 0, fz)
+      b.torque.x += ry * fz;
+      b.torque.y += r.z * fx - r.x * fz;
+      b.torque.z += -ry * fx;
+    }
     b.bodyToWorld(_drag as Vector3, _fWorld);
     b.force.add(_fWorld);
+
+    // Kreiselmoment der Rotoren: Drehimpuls H = Σ J·ω_i (Richtung je Drehsinn) entlang der Hochachse.
+    // Bei Roll-/Nickbewegungen während eines Gier-Manövers entsteht ein Präzessionsmoment τ = −ω × H.
+    let hy = 0;
+    for (let i = 0; i < this.motors.length; i++) {
+      hy += -cfg.frame.motors[i].spin * cfg.motor.rotorInertia * this.motors[i].omega;
+    }
+    b.torque.x -= w.y * 0 - w.z * hy;
+    b.torque.z -= w.x * hy - w.y * 0;
 
     // Rotationsdämpfung
     b.torque.addScaledVector(w, -cfg.aero.angularDrag * densityRatio);

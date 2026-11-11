@@ -32,7 +32,8 @@ export type PlaneMode = 'manual' | 'gyro' | 'angle';
 export interface Settings {
   /** Gewähltes Fluggerät (siehe vehicles/registry.ts). */
   vehicle: string;
-  rates: RatesSettings;
+  /** Vom Spieler angepasste Rates je Drohne (sonst gelten die Standard-Rates des Modells). */
+  rateProfiles: Record<string, RatesSettings>;
   flightMode: FlightMode;
   /** Flugmodus für Flugzeuge: manuell, stabilisiert (Gyro) oder lagestabilisiert (Angle). */
   planeMode: PlaneMode;
@@ -65,13 +66,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   vehicle: 'freestyle5',
-  rates: {
-    roll: { rcRate: 1.0, superRate: 0.7, expo: 0.0 },
-    pitch: { rcRate: 1.0, superRate: 0.7, expo: 0.0 },
-    yaw: { rcRate: 1.0, superRate: 0.7, expo: 0.0 },
-    throttleMid: 0.5,
-    throttleExpo: 0.0,
-  },
+  rateProfiles: {},
   flightMode: 'acro',
   planeMode: 'gyro',
   environment: { ...DEFAULT_ENVIRONMENT },

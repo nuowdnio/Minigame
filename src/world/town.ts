@@ -177,6 +177,7 @@ export function buildTown(scene: THREE.Scene, shadows: boolean): Arena {
 
   return {
     name: 'Kleinstadt mit Flugplatz',
+    cars: b.fleet,
     collision,
     sun,
     sunDirection: sunDir,

@@ -7,6 +7,7 @@
  *  - Überlast: Motor/Regler überhitzen (Strom), Akku überhitzt/tiefentladen
  *  - Flugzeug: Lastvielfaches über der Bruchgrenze, Überschreiten von V_NE (Flattern)
  */
+import { Vector3 } from 'three';
 import type { Battery } from '../physics/battery';
 import type { Motor } from '../physics/motor';
 
@@ -22,8 +23,19 @@ export function damageScale(mode: DamageMode): number {
   return mode === 'robust' ? 1.7 : mode === 'off' ? Infinity : 1;
 }
 
+/** Explosion der Nutzlast (für Effekte und Schäden an der Umgebung). */
+export interface ExplosionEvent {
+  position: Vector3;
+  radius: number;
+  /** Direkt getroffenes Auto (falls vorhanden). */
+  carId: number | null;
+}
+
 export class DamageState {
   destroyed = false;
+  /** Fluggerät wurde durch die eigene Explosion vollständig zerrissen. */
+  vaporized = false;
+  private explosionQueue: ExplosionEvent[] = [];
   /** Abgebrochene / zerstörte Teile (für Darstellung und Trümmer). */
   readonly brokenParts = new Set<string>();
   /** Teile, die rauchen (durchgebrannte Motoren, Akku). */
@@ -36,6 +48,8 @@ export class DamageState {
 
   reset(): void {
     this.destroyed = false;
+    this.vaporized = false;
+    this.explosionQueue = [];
     this.brokenParts.clear();
     this.smoking.clear();
     this.pending = [];
@@ -59,6 +73,19 @@ export class DamageState {
     if (this.destroyed) return;
     this.destroyed = true;
     this.emit(text, 'critical', 'destroyed');
+  }
+
+  explode(e: ExplosionEvent): void {
+    this.vaporized = true;
+    this.destroyed = true;
+    this.explosionQueue.push(e);
+    this.emit('💥 EXPLOSION – Drohne zerstört', 'critical', 'explosion');
+  }
+
+  takeExplosions(): ExplosionEvent[] {
+    const e = this.explosionQueue;
+    this.explosionQueue = [];
+    return e;
   }
 
   takeEvents(): DamageEvent[] {

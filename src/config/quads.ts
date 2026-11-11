@@ -2,12 +2,39 @@
  * Drohnen-Presets. Jede Drohne hat eigene Physikwerte (Masse, Trägheit, Motoren, Akku,
  * Aerodynamik) und ein eigenes PID-Tuning. Basis ist der 5"-Freestyle-Quad aus physics.ts.
  */
+import type { RatesSettings } from './defaults';
 import type { AxisPid } from './flightController';
 import { PHYSICS, type ContactPointDef, type MotorLayoutEntry, type QuadConfig } from './physics';
+
+/** Flight-Controller-Abstimmung, wie ein Pilot sie für sein Modell einstellt. */
+export interface QuadTune {
+  /** Standard-Rates des Modells (im Menü je Modell änderbar). */
+  rates: RatesSettings;
+  tpaRate: number;
+  tpaBreakpoint: number;
+  thrustLinear: number;
+  vbatSagComp: number;
+  gyroLowpassHz: number;
+  dtermLowpassHz: number;
+  feedforwardLowpassHz: number;
+}
+
+/** Nutzlast mit Sprengladung (Spielmechanik). */
+export interface PayloadConfig {
+  kind: 'explosive';
+  /** Wirkradius der Explosion (m). */
+  blastRadius: number;
+  /** Zünder wird nach so vielen Sekunden Flugzeit scharf (Startschutz). */
+  armTime: number;
+  /** Aufprallgeschwindigkeit, ab der die Ladung immer zündet (m/s). */
+  impactTrigger: number;
+}
 
 export interface QuadPreset {
   physics: QuadConfig;
   pid: { roll: AxisPid; pitch: AxisPid; yaw: AxisPid };
+  tune: QuadTune;
+  payload?: PayloadConfig;
   /** Optik */
   visual: {
     ducts: boolean;
@@ -17,6 +44,8 @@ export interface QuadPreset {
     batteryColor: number;
     /** Größe (m) für die Verfolgerkamera. */
     size: number;
+    /** Nutzlast unter dem Rahmen anzeigen. */
+    payload?: boolean;
   };
   /** FPV-Kamera-Montage im Körper-System (m). */
   cameraMount: { x: number; y: number; z: number };
@@ -129,6 +158,17 @@ export const QUAD_PRESETS = {
       });
       c.gyro.noise = 0.3;
     }),
+    tune: {
+      rates: {
+        roll: { rcRate: 1.0, superRate: 0.68, expo: 0.1 },
+        pitch: { rcRate: 1.0, superRate: 0.68, expo: 0.1 },
+        yaw: { rcRate: 1.0, superRate: 0.6, expo: 0.1 },
+        throttleMid: 0.5,
+        throttleExpo: 0.1,
+      },
+      tpaRate: 0, tpaBreakpoint: 0.5, thrustLinear: 0.25, vbatSagComp: 0.7,
+      gyroLowpassHz: 200, dtermLowpassHz: 90, feedforwardLowpassHz: 30,
+    },
     pid: {
       roll: { p: 60, i: 70, d: 40, ff: 90 },
       pitch: { p: 60, i: 70, d: 40, ff: 90 },
@@ -141,15 +181,16 @@ export const QUAD_PRESETS = {
 
   cinewhoop: {
     physics: derive((c) => {
-      c.frame.mass = 0.3;
-      c.frame.inertia = { x: 0.00055, y: 0.00095, z: 0.0005 };
+      // mit Action-Kamera obendrauf: schwer, träge, viel Luftwiderstand
+      c.frame.mass = 0.42;
+      c.frame.inertia = { x: 0.0008, y: 0.0014, z: 0.00075 };
       c.frame.motors = quadX(0.05);
       c.frame.contactPoints = contacts(0.05, 0.05, 0.03, 0.03);
       Object.assign(c.motor, {
         kv: 3800,
-        maxThrust: 4.6,
+        maxThrust: 4.3,
         torqueToThrust: 0.011,
-        rotorInertia: 1.2e-6,
+        rotorInertia: 1.6e-6,
         windingResistance: 0.11,
         noLoadCurrent: 0.6,
         escCurrentLimit: 35,
@@ -177,16 +218,27 @@ export const QUAD_PRESETS = {
         coolingPerSpeed: 0.02,
       });
       Object.assign(c.aero, {
-        linearDrag: { x: 0.02, y: 0.03, z: 0.02 },
-        dragArea: { x: 0.016, y: 0.03, z: 0.016 },
-        rotorDrag: 0.03,
-        angularDrag: 0.0001,
+        linearDrag: { x: 0.025, y: 0.035, z: 0.025 },
+        dragArea: { x: 0.02, y: 0.034, z: 0.02 },
+        rotorDrag: 0.035,
+        angularDrag: 0.00025,
       });
     }),
+    tune: {
+      rates: {
+        roll: { rcRate: 0.8, superRate: 0.45, expo: 0.35 },
+        pitch: { rcRate: 0.8, superRate: 0.45, expo: 0.35 },
+        yaw: { rcRate: 0.7, superRate: 0.3, expo: 0.3 },
+        throttleMid: 0.4,
+        throttleExpo: 0.35,
+      },
+      tpaRate: 0, tpaBreakpoint: 0.5, thrustLinear: 0.3, vbatSagComp: 1.0,
+      gyroLowpassHz: 150, dtermLowpassHz: 70, feedforwardLowpassHz: 12,
+    },
     pid: {
-      roll: { p: 50, i: 85, d: 38, ff: 100 },
-      pitch: { p: 52, i: 88, d: 40, ff: 100 },
-      yaw: { p: 50, i: 85, d: 0, ff: 100 },
+      roll: { p: 42, i: 90, d: 40, ff: 40 },
+      pitch: { p: 44, i: 92, d: 42, ff: 40 },
+      yaw: { p: 45, i: 90, d: 0, ff: 40 },
     },
     visual: { ducts: true, frameColor: 0x26292e, propColorFront: 0xffffff, propColorRear: 0x888888, batteryColor: 0x2a62c9, size: 0.18 },
     cameraMount: { x: 0, y: 0.03, z: -0.045 },
@@ -195,6 +247,17 @@ export const QUAD_PRESETS = {
 
   freestyle5: {
     physics: structuredClone(PHYSICS),
+    tune: {
+      rates: {
+        roll: { rcRate: 1.0, superRate: 0.7, expo: 0.0 },
+        pitch: { rcRate: 1.0, superRate: 0.7, expo: 0.0 },
+        yaw: { rcRate: 1.0, superRate: 0.7, expo: 0.0 },
+        throttleMid: 0.5,
+        throttleExpo: 0.0,
+      },
+      tpaRate: 0.4, tpaBreakpoint: 0.5, thrustLinear: 0, vbatSagComp: 0.8,
+      gyroLowpassHz: 250, dtermLowpassHz: 90, feedforwardLowpassHz: 40,
+    },
     pid: {
       roll: { p: 45, i: 80, d: 30, ff: 120 },
       pitch: { p: 47, i: 84, d: 34, ff: 125 },
@@ -207,28 +270,41 @@ export const QUAD_PRESETS = {
 
   race5: {
     physics: derive((c) => {
-      c.frame.mass = 0.54;
-      c.frame.inertia = { x: 0.0017, y: 0.0031, z: 0.0014 };
+      // reiner Racer: leicht, schmal, steife Arme, hohe Steigung (5 × 4.8")
+      c.frame.mass = 0.47;
+      c.frame.inertia = { x: 0.0012, y: 0.0022, z: 0.001 };
       c.frame.motors = quadX(0.072, 0.082);
       c.frame.contactPoints = contacts(0.072, 0.082, 0.017, 0.04);
       Object.assign(c.motor, {
-        kv: 1960,
-        maxThrust: 13.2,
-        rotorInertia: 4.5e-6,
-        windingResistance: 0.065,
-        propPitch: 0.094,
-        zeroThrustSpeedFactor: 1.45,
+        kv: 2000,
+        maxThrust: 13.8,
+        rotorInertia: 3.8e-6,
+        windingResistance: 0.06,
+        propPitch: 0.122,
+        zeroThrustSpeedFactor: 1.35,
       });
-      Object.assign(c.battery, { capacityMah: 1100, internalResistance: 0.03, heatCapacity: 170 });
+      Object.assign(c.battery, { capacityMah: 1100, internalResistance: 0.026, heatCapacity: 170 });
       Object.assign(c.aero, {
-        linearDrag: { x: 0.012, y: 0.016, z: 0.01 },
-        dragArea: { x: 0.008, y: 0.019, z: 0.0055 },
+        linearDrag: { x: 0.01, y: 0.014, z: 0.008 },
+        dragArea: { x: 0.007, y: 0.016, z: 0.005 },
+        angularDrag: 0.0003,
       });
     }),
+    tune: {
+      rates: {
+        roll: { rcRate: 1.25, superRate: 0.74, expo: 0.1 },
+        pitch: { rcRate: 1.25, superRate: 0.74, expo: 0.1 },
+        yaw: { rcRate: 1.1, superRate: 0.65, expo: 0.1 },
+        throttleMid: 0.5,
+        throttleExpo: 0.0,
+      },
+      tpaRate: 0.65, tpaBreakpoint: 0.35, thrustLinear: 0, vbatSagComp: 1.0,
+      gyroLowpassHz: 320, dtermLowpassHz: 120, feedforwardLowpassHz: 70,
+    },
     pid: {
-      roll: { p: 48, i: 85, d: 32, ff: 140 },
-      pitch: { p: 50, i: 88, d: 35, ff: 145 },
-      yaw: { p: 48, i: 85, d: 0, ff: 130 },
+      roll: { p: 52, i: 85, d: 30, ff: 180 },
+      pitch: { p: 54, i: 88, d: 33, ff: 185 },
+      yaw: { p: 55, i: 85, d: 0, ff: 150 },
     },
     visual: { ducts: false, frameColor: 0x111111, propColorFront: 0x39ff14, propColorRear: 0x39ff14, batteryColor: 0xc92a2a, size: 0.24 },
     cameraMount: { x: 0, y: 0.018, z: -0.065 },
@@ -278,6 +354,17 @@ export const QUAD_PRESETS = {
         angularDrag: 0.0012,
       });
     }),
+    tune: {
+      rates: {
+        roll: { rcRate: 0.9, superRate: 0.55, expo: 0.3 },
+        pitch: { rcRate: 0.9, superRate: 0.55, expo: 0.3 },
+        yaw: { rcRate: 0.8, superRate: 0.4, expo: 0.3 },
+        throttleMid: 0.45,
+        throttleExpo: 0.2,
+      },
+      tpaRate: 0.3, tpaBreakpoint: 0.5, thrustLinear: 0.1, vbatSagComp: 0.6,
+      gyroLowpassHz: 150, dtermLowpassHz: 70, feedforwardLowpassHz: 20,
+    },
     pid: {
       roll: { p: 45, i: 30, d: 50, ff: 50 },
       pitch: { p: 47, i: 32, d: 53, ff: 50 },
@@ -285,6 +372,64 @@ export const QUAD_PRESETS = {
     },
     visual: { ducts: false, frameColor: 0x2b2f38, propColorFront: 0xff2a2a, propColorRear: 0x444444, batteryColor: 0x3aa64a, size: 0.35 },
     cameraMount: { x: 0, y: 0.03, z: -0.08 },
+    damage: { propChip: 2.2, propBreak: 5, armBreak: 9, frameBreak: 15 },
+  },
+  bomber7: {
+    physics: derive((c) => {
+      // 7"-Rahmen mit Sprengladung unter dem Rahmen: schwer, tiefer Schwerpunkt, viel Trägheit
+      c.frame.mass = 1.45;
+      c.frame.inertia = { x: 0.0115, y: 0.017, z: 0.0105 };
+      c.frame.motors = quadX(0.111);
+      c.frame.contactPoints = [
+        ...contacts(0.111, 0.111, 0.022, 0.05),
+        { position: { x: 0, y: -0.075, z: 0.01 }, radius: 0.035, part: 'payload' },
+        { position: { x: 0, y: -0.06, z: -0.07 }, radius: 0.03, part: 'payload' },
+      ];
+      Object.assign(c.motor, {
+        kv: 1350,
+        maxThrust: 22,
+        torqueToThrust: 0.02,
+        idle: 0.05,
+        rotorInertia: 2.8e-5,
+        windingResistance: 0.055,
+        noLoadCurrent: 1.1,
+        escCurrentLimit: 55,
+        motorHeatCapacity: 45,
+        motorCooling: 0.4,
+        motorCoolingPerKrads: 0.5,
+        escHeatCapacity: 4,
+        propDiameter: 0.178,
+        propPitch: 0.107,
+        zeroThrustSpeedFactor: 1.35,
+        translationalLift: 0.14,
+      });
+      Object.assign(c.battery, { cells: 6, capacityMah: 2200, internalResistance: 0.022, heatCapacity: 320 });
+      Object.assign(c.aero, {
+        linearDrag: { x: 0.025, y: 0.035, z: 0.025 },
+        dragArea: { x: 0.018, y: 0.042, z: 0.016 },
+        rotorDrag: 0.045,
+        angularDrag: 0.0014,
+      });
+    }),
+    tune: {
+      rates: {
+        roll: { rcRate: 0.85, superRate: 0.5, expo: 0.25 },
+        pitch: { rcRate: 0.85, superRate: 0.5, expo: 0.25 },
+        yaw: { rcRate: 0.8, superRate: 0.4, expo: 0.25 },
+        throttleMid: 0.45,
+        throttleExpo: 0.15,
+      },
+      tpaRate: 0.3, tpaBreakpoint: 0.5, thrustLinear: 0.1, vbatSagComp: 0.6,
+      gyroLowpassHz: 150, dtermLowpassHz: 70, feedforwardLowpassHz: 20,
+    },
+    pid: {
+      roll: { p: 45, i: 30, d: 52, ff: 45 },
+      pitch: { p: 47, i: 32, d: 55, ff: 45 },
+      yaw: { p: 48, i: 80, d: 0, ff: 80 },
+    },
+    payload: { kind: 'explosive', blastRadius: 7, armTime: 1.5, impactTrigger: 7 },
+    visual: { ducts: false, frameColor: 0x3d4a2a, propColorFront: 0xff2a2a, propColorRear: 0x333333, batteryColor: 0x1b1b1b, size: 0.4, payload: true },
+    cameraMount: { x: 0, y: 0.03, z: -0.085 },
     damage: { propChip: 2.2, propBreak: 5, armBreak: 9, frameBreak: 15 },
   },
 } satisfies Record<string, QuadPreset>;

@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import type { CarFleet } from './cars';
 import type { StaticWorld } from './collision';
 
 /** Gemeinsame Beschreibung einer Spielwelt. */
@@ -12,4 +13,6 @@ export interface Arena {
   spawns: { quad: THREE.Vector3; quadYaw: number; plane: THREE.Vector3; planeYaw: number };
   /** Standorte der Windsäcke. */
   windsocks: THREE.Vector3[];
+  /** Zerstörbare Autos (falls vorhanden). */
+  cars?: CarFleet | null;
 }

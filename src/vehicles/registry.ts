@@ -1,4 +1,4 @@
-import type { Settings } from '../config/defaults';
+import type { RatesSettings, Settings } from '../config/defaults';
 import { PLANE_PRESETS, type PlanePresetId } from '../config/planes';
 import { QUAD_PRESETS, type QuadPresetId } from '../config/quads';
 import { PlaneVehicle } from './planeVehicle';
@@ -14,10 +14,11 @@ export interface VehicleInfo {
 
 export const VEHICLES: VehicleInfo[] = [
   { id: 'whoop', kind: 'quad', name: 'Tiny Whoop 65 mm', description: '1S, 32 g, Ducts – langsam, robust, für drinnen' },
-  { id: 'cinewhoop', kind: 'quad', name: 'Cinewhoop 3"', description: '4S, 300 g, Ducts – ruhig, viel Luftwiderstand' },
+  { id: 'cinewhoop', kind: 'quad', name: 'Cinewhoop 3"', description: '4S, 420 g mit Kamera, Ducts – sanft, langsam, butterweich' },
   { id: 'freestyle5', kind: 'quad', name: 'Freestyle 5"', description: '6S, 650 g – der Allrounder' },
-  { id: 'race5', kind: 'quad', name: 'Racer 5"', description: '6S, 540 g – leicht, schnell, nervös' },
+  { id: 'race5', kind: 'quad', name: 'Racer 5"', description: '6S, 470 g, Schub/Gewicht 12:1 – extrem direkt, sehr schnell' },
   { id: 'longrange7', kind: 'quad', name: 'Long Range 7"', description: '6S Li-Ion, 1050 g – träge, effizient, wenig Punch' },
+  { id: 'bomber7', kind: 'quad', name: 'Sprengstoff-Drohne 7"', description: '6S, 1450 g mit Sprengladung – explodiert beim Einschlag (z. B. in ein Auto)' },
   { id: 'trainer', kind: 'plane', name: 'Trainer (Hochdecker)', description: '1.4 m, Bugfahrwerk – Start von der Piste' },
   { id: 'wing', kind: 'plane', name: 'FPV-Nurflügler', description: '1.0 m, Druckpropeller, Handstart – schnell' },
   { id: 'glider', kind: 'plane', name: 'Segler 2 m', description: 'Elektrosegler, Handstart – Thermik nutzen' },
@@ -33,4 +34,15 @@ export function createVehicle(id: string, settings: Settings, dt: number): Vehic
 
 export function vehicleInfo(id: string): VehicleInfo {
   return VEHICLES.find((v) => v.id === id) ?? VEHICLES.find((v) => v.id === DEFAULT_VEHICLE)!;
+}
+
+/** Aktive Rates einer Drohne: eigene Anpassung oder Standard des Modells. */
+export function ratesFor(settings: Settings, id: string): RatesSettings | null {
+  if (!(id in QUAD_PRESETS)) return null;
+  return settings.rateProfiles[id] ?? structuredClone(QUAD_PRESETS[id as QuadPresetId].tune.rates);
+}
+
+/** Standard-Rates eines Modells. */
+export function defaultRates(id: string): RatesSettings | null {
+  return id in QUAD_PRESETS ? structuredClone(QUAD_PRESETS[id as QuadPresetId].tune.rates) : null;
 }

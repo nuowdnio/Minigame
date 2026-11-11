@@ -15,6 +15,8 @@ import { TelemetryPanel } from './ui/telemetryPanel';
 import { buildTestArena } from './world/testArena';
 import { buildTown } from './world/town';
 import { DebrisSystem, SmokeSystem } from './render/effects';
+import { ExplosionFx, FireSystem } from './render/explosion';
+import { SignalLostOverlay } from './ui/signalLost';
 
 let settings: Settings = loadSettings();
 // Tablets: beim ersten Start mittlere Grafikqualität (Akku/Wärme)
@@ -59,6 +61,12 @@ sim.reset(spawnPoint(), spawnYaw());
 const debris = new DebrisSystem(scene, arena.collision);
 const smoke = new SmokeSystem(scene);
 const smokeSources: THREE.Vector3[] = [];
+// Explosionen, Feuer und brennende Autowracks
+const fire = new FireSystem(scene);
+const fx = new ExplosionFx(scene, fire, smoke, debris);
+const wreckSmoke = new SmokeSystem(scene);
+const carFires: THREE.Vector3[] = [];
+const wreckSmokeSources: THREE.Vector3[] = [];
 const windHere = new THREE.Vector3();
 
 /** Modell neu aufbauen (nach Reset sind abgebrochene Teile wieder dran). */
@@ -68,6 +76,10 @@ function rebuildView(): void {
   scene.add(view.root);
   debris.clear();
   smoke.clear();
+  fx.clear();
+  fire.clear();
+  wreckSmoke.clear();
+  arena.cars?.restore();
 }
 
 /** Fluggerät wechseln: Physik und Modell neu aufbauen. */
@@ -97,6 +109,7 @@ chaseRig.world = arena.collision;
 const ui = document.getElementById('ui')!;
 const osd = new Osd(ui);
 const telemetry = new TelemetryPanel(ui);
+const signalLost = new SignalLostOverlay(ui);
 const help = document.getElementById('help')!;
 help.addEventListener('pointerdown', (e) => {
   e.preventDefault();
@@ -222,10 +235,23 @@ function frame(now: number): void {
   // Schäden: abgebrochene Teile werden zu Trümmern, Meldungen ins OSD
   for (const part of view.takeDetached(vehicle)) debris.add(part, vehicle.body.velocity, 2.5);
   for (const ev of vehicle.damage.takeEvents()) osd.message(ev.text, ev.severity);
+  // Explosion der Nutzlast: Effekte, Autos im Wirkradius zerstören, Drohne zerrissen
+  for (const ex of vehicle.damage.takeExplosions()) {
+    fx.explode(ex.position, ex.radius, camera.position);
+    for (const part of view.takeDetached(vehicle)) debris.add(part, new THREE.Vector3(), 12);
+    const cars = arena.cars?.destroyNear(ex.position, ex.radius, ex.carId) ?? [];
+    if (cars.length) osd.message(cars.length === 1 ? 'Auto zerstört' : `${cars.length} Autos zerstört`, 'critical');
+  }
   if (!paused) {
     debris.update(dt);
     env.wind(renderPos, sim.time, windHere);
     smoke.update(dt, view.smokeSources(vehicle, smokeSources), windHere, Math.max(0.6, vehicle.size * 2));
+    arena.cars?.update(dt, carFires);
+    fire.update(dt, carFires, windHere);
+    wreckSmokeSources.length = 0;
+    for (const f of carFires) wreckSmokeSources.push(f.clone().setY(f.y + 1.2));
+    wreckSmoke.update(dt, wreckSmokeSources, windHere, 4);
+    fx.update(dt);
   }
 
   updateCameraProjection();
@@ -234,11 +260,20 @@ function frame(now: number): void {
     fpvRig.mount.copy(vehicle.cameraMount);
     fpvRig.update(camera, renderPos, renderQuat, vehicle.cameraTilt(settings));
   } else {
-    view.root.visible = true;
+    view.root.visible = !vehicle.damage.vaporized;
     chaseRig.distance = Math.max(1.2, vehicle.size * 2.4);
     chaseRig.height = 0.3 + vehicle.size * 0.6;
     chaseRig.update(camera, renderPos, renderQuat, body.velocity, dt);
   }
+  // Erschütterung durch Explosionen
+  if (fx.shake > 0) {
+    camera.position.x += (Math.random() - 0.5) * fx.shake * 0.5;
+    camera.position.y += (Math.random() - 0.5) * fx.shake * 0.5;
+    camera.position.z += (Math.random() - 0.5) * fx.shake * 0.5;
+  }
+  // FPV-Video bricht ab, wenn die Drohne zerrissen wurde
+  signalLost.set(settings.camera.view === 'fpv' && vehicle.damage.vaporized);
+  signalLost.update();
 
   if (!paused) {
     particles.update(env, sim.time, camera.position, dt);
@@ -260,3 +295,4 @@ requestAnimationFrame(frame);
 
 // Für Konsolen-Tuning
 (window as unknown as Record<string, unknown>).sim = sim;
+(window as unknown as Record<string, unknown>).arena = arena;
