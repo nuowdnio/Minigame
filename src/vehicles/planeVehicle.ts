@@ -80,6 +80,36 @@ export class PlaneVehicle implements Vehicle {
     }
   }
 
+  get zoomLevels(): number[] {
+    return this.config.zoomLevels ?? [1, 2];
+  }
+
+  /** Treffer durch Beschuss: Fläche, Propeller oder Rumpf. */
+  applyHit(): void {
+    if (this.damage.destroyed || this.damageMode === 'off') return;
+    const p = this.plane;
+    const r = Math.random();
+    if (r < 0.1) {
+      this.damage.destroy('Volltreffer – Rumpf zerstört');
+    } else if (r < 0.3 && p.motor.health > 0) {
+      p.motor.health = 0;
+      this.damage.break('prop', 'Treffer – Propeller zerstört', 'critical');
+    } else {
+      const live = p.surfaces.filter((s) => s.health > 0);
+      const s = live[Math.floor(Math.random() * live.length)];
+      if (!s) return;
+      s.health -= 0.5;
+      if (s.def.control) s.jammed = Math.random() < 0.5;
+      if (s.health <= 0) {
+        s.health = 0;
+        for (const cp of p.contactPoints) if (cp.part === s.def.name) cp.removed = true;
+        this.damage.break(s.def.name, `Treffer – ${SURFACE_NAMES[s.def.name] ?? s.def.name} abgeschossen`, 'critical');
+      } else {
+        this.damage.emit(`Treffer – ${SURFACE_NAMES[s.def.name] ?? s.def.name} beschädigt`, 'warn', `hit${Math.random()}`);
+      }
+    }
+  }
+
   get statusHint(): string {
     if (this.damage.destroyed) return 'ZERSTÖRT – RESET (R / ↺)';
     return this.launchPending ? 'GAS GEBEN FÜR HANDSTART' : '';

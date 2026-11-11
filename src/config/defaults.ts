@@ -42,6 +42,10 @@ export interface Settings {
   damage: 'off' | 'realistic' | 'robust';
   /** Spielwelt. */
   world: 'town' | 'testfield';
+  /** Spielmodus: Freiflug oder Mission. */
+  mode: 'free' | 'convoy' | 'intercept';
+  /** Störsender und Flugabwehr auch im Freiflug aktiv. */
+  threats: 'off' | 'on';
   camera: {
     /** Kamerawinkel nach oben (Uptilt) in Grad, 0 – 50. */
     angle: number;
@@ -72,6 +76,8 @@ export const DEFAULT_SETTINGS: Settings = {
   environment: { ...DEFAULT_ENVIRONMENT },
   damage: 'realistic',
   world: 'town',
+  mode: 'free',
+  threats: 'off',
   camera: {
     angle: 25,
     fov: 120,

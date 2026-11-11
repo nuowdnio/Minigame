@@ -7,7 +7,7 @@ import { FlightController, type GyroRates, type Sticks } from '../fc/flightContr
 import { attitude } from '../fc/planeController';
 import { Quad, gaussian } from '../physics/quad';
 import { DamageState, damageScale, type DamageMode } from './damage';
-import { bodyRatesToFc, type Vehicle } from './vehicle';
+import { bodyRatesToFc, type CargoDrop, type Vehicle } from './vehicle';
 
 const MOTOR_NAMES = ['Motor hinten rechts', 'Motor vorne rechts', 'Motor hinten links', 'Motor vorne links'];
 
@@ -24,6 +24,8 @@ export class QuadVehicle implements Vehicle {
   private readonly zero = [0, 0, 0, 0];
   /** Flugzeit seit dem Abheben (für den Zünder der Nutzlast). */
   private airTime = 0;
+  /** Versorgungskiste noch angehängt. */
+  cargoAttached = false;
 
   constructor(
     readonly id: string,
@@ -90,6 +92,58 @@ export class QuadVehicle implements Vehicle {
     this.fc.reset();
     this.damage.reset();
     this.airTime = 0;
+    this.restoreCargo();
+  }
+
+  get zoomLevels(): number[] {
+    return this.preset.zoomLevels ?? [1, 2];
+  }
+
+  /** Masse und Trägheit inkl. angehängter Last wiederherstellen. */
+  private restoreCargo(): void {
+    const f = this.preset.physics.frame;
+    const b = this.quad.body;
+    b.mass = f.mass;
+    b.inertia.set(f.inertia.x, f.inertia.y, f.inertia.z);
+    b.invInertia.set(1 / f.inertia.x, 1 / f.inertia.y, 1 / f.inertia.z);
+    this.cargoAttached = !!this.preset.cargo;
+  }
+
+  /** Versorgungskiste ausklinken: Masse und Trägheit ändern sich schlagartig. */
+  dropCargo(): CargoDrop | null {
+    const c = this.preset.cargo;
+    if (!c || !this.cargoAttached || this.damage.destroyed) return null;
+    this.cargoAttached = false;
+    const b = this.quad.body;
+    b.mass -= c.mass;
+    b.inertia.x -= c.inertia.x;
+    b.inertia.y -= c.inertia.y;
+    b.inertia.z -= c.inertia.z;
+    b.invInertia.set(1 / b.inertia.x, 1 / b.inertia.y, 1 / b.inertia.z);
+    const pos = new Vector3(0, c.hangY, 0).applyQuaternion(b.orientation).add(b.position);
+    this.damage.emit('Versorgungskiste abgeworfen', 'info', `drop${Math.random()}`);
+    return { position: pos, velocity: b.velocity.clone(), mass: c.mass, chuteArea: c.chuteArea };
+  }
+
+  /** Treffer durch Beschuss: Propeller, Arm oder Akku. */
+  applyHit(): void {
+    if (this.damage.destroyed || this.damageMode === 'off') return;
+    const q = this.quad;
+    const i = Math.floor(Math.random() * q.motors.length);
+    const r = Math.random();
+    if (this.preset.payload && this.fuseArmed && r < 0.3) {
+      this.damage.explode({ position: q.body.position.clone(), radius: this.preset.payload.blastRadius, carId: null });
+    } else if (r < 0.12) {
+      this.damage.destroy('Volltreffer – Akku zerstört');
+    } else if (r < 0.4) {
+      q.motors[i].health = 0;
+      q.motors[i].failure = 'motor';
+      q.contactPoints[i].removed = true;
+      this.damage.break(`arm${i}`, 'Treffer – Arm abgerissen', 'critical');
+    } else {
+      q.motors[i].health = 0;
+      this.damage.break(`prop${i}`, 'Treffer – Propeller zerstört', 'critical');
+    }
   }
 
   step(dt: number, sticks: Sticks, env: Environment, time: number): void {

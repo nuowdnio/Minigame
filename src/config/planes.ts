@@ -93,6 +93,8 @@ export interface PlaneDamageLimits {
 
 export interface PlaneConfig {
   damage: PlaneDamageLimits;
+  /** Zoomstufen der Kamera. */
+  zoomLevels?: number[];
   mass: number;
   inertia: Vec3Like;
   surfaces: SurfaceDef[];
@@ -120,6 +122,17 @@ export interface PlaneConfig {
 }
 
 const BASE_MOTOR = PHYSICS.motor;
+
+/** Li-Ion-Kennlinie (Langstrecke). */
+const LIION: [number, number][] = [
+  [0.0, 2.8],
+  [0.1, 3.3],
+  [0.2, 3.45],
+  [0.4, 3.62],
+  [0.6, 3.76],
+  [0.8, 3.95],
+  [1.0, 4.2],
+];
 
 function battery(cells: number, capacityMah: number, ir: number, heat: number): BatteryParams {
   return {
@@ -337,6 +350,73 @@ export const PLANE_PRESETS = {
     visual: { fuselageLength: 1.1, fuselageWidth: 0.06, fuselageNose: -0.5, color: 0xffffff, accent: 0x1971c2, size: 2.2 },
     cameraMount: { x: 0, y: 0.05, z: -0.38 },
     cameraTiltDeg: 0,
+  },
+
+  recon: {
+    zoomLevels: [1, 3, 8],
+    damage: { maxG: 5, vne: 34, gearBreak: 99, wingBreak: 5, bodyBreak: 12 },
+    mass: 1.7,
+    inertia: { x: 0.11, y: 0.62, z: 0.52 },
+    surfaces: [
+      {
+        name: 'wingR', position: { x: 0.55, y: 0.06, z: -0.008 }, span: 1.1, chord: 0.21,
+        orientation: 'horizontal', dihedralDeg: 4, incidenceDeg: 2.5, aspectRatio: 10.5,
+        cl0: 0.35, cd0: 0.009, oswald: 0.9, stallDeg: 12, cm0: -0.07,
+        control: { chordFraction: 0.22, spanFraction: 0.4, maxDeg: 15, mix: { roll: -1 } },
+      },
+      {
+        name: 'wingL', position: { x: -0.55, y: 0.06, z: -0.008 }, span: 1.1, chord: 0.21,
+        orientation: 'horizontal', dihedralDeg: 4, incidenceDeg: 2.5, aspectRatio: 10.5,
+        cl0: 0.35, cd0: 0.009, oswald: 0.9, stallDeg: 12, cm0: -0.07,
+        control: { chordFraction: 0.22, spanFraction: 0.4, maxDeg: 15, mix: { roll: 1 } },
+      },
+      {
+        name: 'stab', position: { x: 0, y: 0.03, z: 1.0 }, span: 0.5, chord: 0.12,
+        orientation: 'horizontal', incidenceDeg: 1.5, aspectRatio: 4.2,
+        cd0: 0.01, oswald: 0.8, stallDeg: 14, downwashFrom: ['wingR', 'wingL'], slipstream: 0.15,
+        control: { chordFraction: 0.4, spanFraction: 1, maxDeg: 18, mix: { pitch: 1 } },
+      },
+      {
+        name: 'fin', position: { x: 0, y: 0.12, z: 1.03 }, span: 0.21, chord: 0.15,
+        orientation: 'vertical', aspectRatio: 2.8, cd0: 0.01, oswald: 0.75, stallDeg: 16, slipstream: 0.2,
+        control: { chordFraction: 0.45, spanFraction: 1, maxDeg: 30, mix: { yaw: -1 } },
+      },
+    ],
+    fuselage: { linearDrag: { x: 0.03, y: 0.03, z: 0.006 }, dragArea: { x: 0.03, y: 0.03, z: 0.007 } },
+    motor: {
+      ...BASE_MOTOR,
+      kv: 900, maxThrust: 13, torqueToThrust: 0.022, idle: 0, rotorInertia: 2.5e-5,
+      windingResistance: 0.07, noLoadCurrent: 0.8, escCurrentLimit: 30,
+      motorHeatCapacity: 35, motorCooling: 0.35, motorCoolingPerKrads: 0.7, motorMaxTemp: 170,
+      escHeatCapacity: 3, escResistance: 0.006, escCooling: 0.35, escMaxTemp: 120,
+      propDiameter: 0.229, propPitch: 0.152, zeroThrustSpeedFactor: 1.25, maxInflowGain: 1.1,
+      position: { x: 0, y: 0.0, z: -0.48 }, spin: 1, slipstreamFactor: 0.9,
+    },
+    battery: { ...battery(4, 6000, 0.06, 300), ocvCurve: LIION },
+    contactPoints: [
+      { position: { x: 0, y: -0.04, z: -0.3 }, radius: 0.025, part: 'body' },
+      { position: { x: 0, y: -0.035, z: 0.2 }, radius: 0.025, part: 'body' },
+      { position: { x: 1.1, y: 0.14, z: 0 }, radius: 0.025, part: 'wingR' },
+      { position: { x: -1.1, y: 0.14, z: 0 }, radius: 0.025, part: 'wingL' },
+      { position: { x: 0, y: 0.0, z: 1.0 }, radius: 0.025, part: 'stab' },
+      { position: { x: 0, y: 0.2, z: 1.0 }, radius: 0.025, part: 'fin' },
+      { position: { x: 0, y: 0, z: -0.5 }, radius: 0.035, part: 'prop' },
+      { position: { x: 0, y: 0.08, z: 0 }, radius: 0.03, part: 'body' },
+    ],
+    contact: PLANE_CONTACT,
+    steerMaxDeg: 0,
+    control: {
+      maxRate: { roll: 120, pitch: 90, yaw: 50 },
+      maxBank: 45, maxPitch: 25,
+      rateGain: { roll: 0.01, pitch: 0.01, yaw: 0.015 },
+      refSpeed: 13, expo: 0.3, pitchTrim: 0, rollTrim: 0.018, servoRate: 300,
+    },
+    spawn: { onGround: false, height: 1.8, speed: 10, pitchDeg: 4 },
+    air: { seaLevelDensity: 1.225 },
+    gravity: 9.81,
+    visual: { fuselageLength: 1.15, fuselageWidth: 0.11, fuselageNose: -0.5, color: 0x8a9580, accent: 0x3b4a3a, size: 2.4 },
+    cameraMount: { x: 0, y: -0.06, z: -0.42 },
+    cameraTiltDeg: -12,
   },
 } satisfies Record<string, PlaneConfig>;
 

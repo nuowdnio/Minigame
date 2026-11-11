@@ -99,10 +99,20 @@ export class SettingsMenu {
           </select></label>
         </section>
         <section>
-          <h2>Welt & Schäden</h2>
+          <h2>Welt, Modus & Schäden</h2>
           <label>Welt <select data-k="world">
             <option value="town" ${s.world === 'town' ? 'selected' : ''}>Kleinstadt mit Flugplatz</option>
             <option value="testfield" ${s.world === 'testfield' ? 'selected' : ''}>Testgelände</option>
+          </select></label>
+          <label>Modus <select data-k="mode">
+            <option value="free" ${s.mode === 'free' ? 'selected' : ''}>Freiflug</option>
+            <option value="convoy" ${s.mode === 'convoy' ? 'selected' : ''}>Mission: Konvoi-Begleitung</option>
+            <option value="intercept" ${s.mode === 'intercept' ? 'selected' : ''}>Mission: Abfangjagd (Abfangdrohne)</option>
+          </select></label>
+          <p class="hint">${s.world === 'town' ? 'Missionen starten beim Schließen des Menüs. Konvoi: Gefahren mit der Kamera anvisieren und melden (M / 📡). Abfangjagd: Aufklärer rammen.' : 'Missionen gibt es nur in der Kleinstadt.'}</p>
+          <label>Gegner im Freiflug <select data-k="threats">
+            <option value="off" ${s.threats === 'off' ? 'selected' : ''}>Aus</option>
+            <option value="on" ${s.threats === 'on' ? 'selected' : ''}>Störsender und Flugabwehr aktiv</option>
           </select></label>
           <label>Schadensmodell <select data-k="damage">
             <option value="realistic" ${s.damage === 'realistic' ? 'selected' : ''}>Realistisch</option>

@@ -15,7 +15,8 @@ Das Spiel läuft komplett per Touch – ohne Tastatur, Controller oder Fernsteue
 - **Touch-Sticks:** linker Daumen = Gas (hoch/runter ziehen, bleibt stehen) + Gieren,
   rechter Daumen = Nicken/Rollen (federn zurück). Der Stick-Mittelpunkt ist dort, wo der Daumen aufsetzt.
   Bei Mode 1 sind Gas und Nicken getauscht. Stickgröße (= Empfindlichkeit) im Menü einstellbar.
-- **Buttons oben:** ⚙ Einstellungen · ↺ Reset · 🎥 FPV/Third Person · 📊 Telemetrie · ? Hilfe · ⛶ Vollbild
+- **Buttons oben:** ⚙ Einstellungen · ↺ Reset · 🎥 FPV/Third Person · 📊 Telemetrie · 🔍 Zoom · 🌡 Wärmebild ·
+  📡 Melden / 📦 Abwerfen (nur wenn passend) · ? Hilfe · ⛶ Vollbild
 - Erscheint automatisch auf Touch-Geräten (Einstellungen → „Touch-Sticks“: Automatisch / Immer an / Aus).
 - In Safari „Teilen → Zum Home-Bildschirm“ wählen: Dann startet das Spiel im Vollbild im Querformat.
 
@@ -44,6 +45,9 @@ Leere Testwelt (Wiese mit 1-m-Raster, Säulen-Slalom, Blöcke, Torbögen) zum Ei
 | FPV ↔ Third Person | C | Select / X |
 | Einstellungen | Esc | |
 | Telemetrie / Hilfe | T / H | |
+| Zoom (Aufklärer, Oktokopter, 7") | Z / Y | B |
+| Wärmebild an/aus | V | LB |
+| Melden (Konvoi) / Kiste abwerfen | B / M / Enter | A |
 
 Auf Touch-Geräten siehe oben „Auf dem iPad spielen“.
 
@@ -115,10 +119,35 @@ Auswahl im Menü (⚙ / Esc → Fluggerät). Jedes Gerät hat eigene Physikwerte
 | Freestyle 5" | 6S, 650 g | Segler 2 m | Elektrosegler, Handstart, Thermik |
 | Racer 5" | 6S, 470 g | | |
 | Long Range 7" | 6S Li-Ion, 1050 g | | |
-| Sprengstoff-Drohne 7" | 6S, 1450 g, Sprengladung | | |
+| Sprengstoff-Drohne 7" | 6S, 1450 g, Sprengladung | Aufklärungsflügel | 1.1 m, 4S Li-Ion, Zoomkamera 1×/3×/8× |
+| Abfangdrohne | 6S 850 mAh, 500 g, sehr schnell, kurze Flugzeit | | |
+| Schwerlast-Oktokopter | 12S, 9 kg + 3 kg Kiste, Abwurf | | |
 
 Flugmodi Flugzeug: **Manuell** (Sticks direkt auf die Ruder), **Stabilisiert** (Kreisel dämpft Böen),
 **Angle** (richtet sich selbst auf – ideal für Touch). Handstart: Modell wird gehalten, bis Gas gegeben wird.
+
+## Militär-Modus (fiktiv)
+
+Im Menü unter **Modus** wählbar. Alles ist bewusst spielerisch und fiktiv gehalten – keine echten Taktiken
+oder Waffendaten.
+
+- **Konvoi-Begleitung:** Ein Konvoi fährt eine Route durch die Stadt. Vorausfliegen, Gefahren auf der Strecke
+  (Straßensperren, verdächtige Objekte, Fahrzeuge) mit der Kamera anvisieren und **melden** (B / A / 📡).
+  Gemeldete Gefahren werden umfahren bzw. abgewartet, übersehene treffen den Konvoi.
+- **Abfangjagd:** Mit der Abfangdrohne gegnerische Aufklärungsdrohnen einholen und rammen, bevor sie die Stadt
+  wieder verlassen. Die Gegner weichen aus, sobald sie dich bemerken.
+- **Störsender:** Masten mit blinkendem Licht. In ihrer Nähe rauscht das Video, die Steuerung reagiert
+  verzögert, bis die Verbindung abreißt (Failsafe, „KEIN SIGNAL“). Gebäude/Gelände zwischen Störsender und
+  Drohne schirmen ab – tief und hinter Deckung fliegen hilft.
+- **Flugabwehr-Stellungen:** schießen nur bei freier Sichtlinie, brauchen Zeit zum Schwenken und schießen
+  in Feuerstößen mit Leuchtspur. Schnelles Queren wird schlechter getroffen als Schweben.
+- **Entdeckung:** Laute, große, hohe und schnelle Fluggeräte werden früher bemerkt (OSD „ENTD“). Tief und
+  langsam in Deckung schleichen lohnt sich.
+- **Versorgungsabwurf:** Der Oktokopter trägt eine Kiste; beim Abwurf ändern sich Masse und Schwerpunkt
+  schlagartig. Die Kiste fällt am Fallschirm, Treffer in den markierten Abwurfzonen geben Punkte.
+- **Zoom & Wärmebild:** Aufklärungsflügel/Oktokopter haben eine Zoomkamera, jedes Fluggerät eine
+  Wärmebild-Ansicht (Motoren, Fahrzeuge, Stellungen und Feuer leuchten weiß).
+- **Gegner im Freiflug:** Im Menü einschaltbar – dann sind Flugabwehr und Störsender auch im Freiflug aktiv.
 
 ## Physikmodell
 
@@ -193,9 +222,9 @@ src/
   input/    Gamepad, RC-Sender, Tastatur
   render/   Drohnen-/Flugzeugmodelle, Kameras, Windsack, Windpartikel, Trümmer, Rauch
   world/    Kollisionswelt (Raster, Prismen, Zylinder, Kugeln), Stadt, Testgelände, Texturen
-  game/     Simulation (fester Zeittakt), Speicher
+  game/     Simulation (fester Zeittakt), Speicher, Funk/Störsender, Entdeckung, Flugabwehr, Konvoi, Gegner, Missionen
   ui/       OSD, Einstellungsmenü, Telemetrie
-tests/      physics/, fc/
+tests/      physics/, fc/, game/
 ```
 
 ## Meilensteine

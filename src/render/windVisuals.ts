@@ -25,6 +25,7 @@ export class WindParticles {
       new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.55, depthWrite: false }),
     );
     this.points.frustumCulled = false;
+    this.points.layers.set(2);
   }
 
   private respawn(i: number, center: THREE.Vector3, anywhere: boolean): void {

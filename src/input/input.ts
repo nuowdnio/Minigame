@@ -9,6 +9,12 @@ export interface InputActions {
   menu: boolean;
   help: boolean;
   telemetry: boolean;
+  /** Zoomstufe wechseln. */
+  zoom: boolean;
+  /** Wärmebild ein/aus. */
+  thermal: boolean;
+  /** Missionsaktion: Last abwerfen bzw. Gefahr melden. */
+  action: boolean;
 }
 
 export type InputSource = 'keyboard' | 'gamepad' | 'rc' | 'touch';
@@ -57,7 +63,16 @@ function applyDeadband(v: number, db: number): number {
 
 export class InputManager {
   readonly sticks: Sticks = { throttle: 0, roll: 0, pitch: 0, yaw: 0 };
-  readonly actions: InputActions = { reset: false, toggleView: false, menu: false, help: false, telemetry: false };
+  readonly actions: InputActions = {
+    reset: false,
+    toggleView: false,
+    menu: false,
+    help: false,
+    telemetry: false,
+    zoom: false,
+    thermal: false,
+    action: false,
+  };
   source: InputSource = 'keyboard';
   gamepadName = '';
 
@@ -93,6 +108,9 @@ export class InputManager {
     a.menu = this.consume('Escape');
     a.help = this.consume('KeyH');
     a.telemetry = this.consume('KeyT');
+    a.zoom = this.consume('KeyZ') || this.consume('KeyY');
+    a.thermal = this.consume('KeyV');
+    a.action = this.consume('KeyB') || this.consume('KeyM') || this.consume('Enter');
 
     if (this.touch) {
       for (const act of this.touch.takeActions()) a[act] = true;
@@ -143,9 +161,15 @@ export class InputManager {
     if (isStandard) {
       if (edge(9) || edge(3)) this.actions.reset = true; // Start / Y
       if (edge(8) || edge(2)) this.actions.toggleView = true; // Select / X
+      if (edge(0)) this.actions.action = true; // A: Abwurf / Melden
+      if (edge(1)) this.actions.zoom = true; // B: Zoom
+      if (edge(4)) this.actions.thermal = true; // LB: Wärmebild
     } else {
       if (edge(0)) this.actions.reset = true;
       if (edge(1)) this.actions.toggleView = true;
+      if (edge(2)) this.actions.action = true;
+      if (edge(3)) this.actions.zoom = true;
+      if (edge(4)) this.actions.thermal = true;
     }
     this.prevButtons = btn;
   }

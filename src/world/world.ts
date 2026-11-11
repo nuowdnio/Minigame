@@ -13,6 +13,8 @@ export interface Arena {
   spawns: { quad: THREE.Vector3; quadYaw: number; plane: THREE.Vector3; planeYaw: number };
   /** Standorte der Windsäcke. */
   windsocks: THREE.Vector3[];
+  /** Himmel (für das Wärmebild ausblendbar). */
+  sky?: THREE.Object3D;
   /** Zerstörbare Autos (falls vorhanden). */
   cars?: CarFleet | null;
 }

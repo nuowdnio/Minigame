@@ -1,7 +1,7 @@
 import type { Settings } from '../config/defaults';
 
 /** Aktionen, die über Bildschirm-Buttons ausgelöst werden. */
-export type TouchAction = 'menu' | 'reset' | 'toggleView' | 'help' | 'telemetry';
+export type TouchAction = 'menu' | 'reset' | 'toggleView' | 'help' | 'telemetry' | 'zoom' | 'thermal' | 'action';
 
 interface StickTouch {
   pointerId: number | null;
@@ -95,6 +95,9 @@ export class TouchControls {
     btn('reset', '↺', 'Reset');
     btn('toggleView', '🎥', 'Kamera wechseln');
     btn('telemetry', '📊', 'Telemetrie');
+    btn('zoom', '🔍', 'Zoom');
+    btn('thermal', '🌡', 'Wärmebild');
+    btn('action', '📡', 'Melden / Abwerfen');
     btn('help', '?', 'Hilfe');
     if (document.fullscreenEnabled || (document as unknown as { webkitFullscreenEnabled?: boolean }).webkitFullscreenEnabled) {
       const b = document.createElement('button');
@@ -258,6 +261,14 @@ export class TouchControls {
         this.throttleFill.style.height = `${this.throttle * 100}%`;
       }
     }
+  }
+
+  /** Symbol der Aktionstaste (📦 Abwurf, 📡 Melden) und ob sie sichtbar ist. */
+  setActionButton(symbol: string | null): void {
+    const b = [...this.buttons.querySelectorAll('button')].find((x) => x.title === 'Melden / Abwerfen');
+    if (!b) return;
+    b.style.display = symbol ? '' : 'none';
+    if (symbol) b.textContent = symbol;
   }
 
   /** Bei Größenänderung des Fensters neu zeichnen. */

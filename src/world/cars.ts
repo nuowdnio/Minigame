@@ -167,6 +167,7 @@ export class CarFleet {
     });
     g.position.set(c.x, 0, c.z);
     g.rotation.y = c.yaw;
+    g.traverse((o) => o.layers.set(1)); // brennendes Wrack: heiß im Wärmebild
     this.scene.add(g);
     // Explosionsimpuls: vom Zentrum weg und nach oben
     const away = new THREE.Vector3(c.x - blast.x, 0, c.z - blast.z);

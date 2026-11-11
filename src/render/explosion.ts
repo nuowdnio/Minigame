@@ -81,6 +81,7 @@ export class FireSystem {
     const f =
       this.pool.pop() ?? { sprite: new THREE.Sprite(this.material.clone()), vel: new THREE.Vector3(), age: 0, life: 1, size: 1 };
     f.sprite.position.copy(pos);
+    f.sprite.layers.set(2);
     f.vel.copy(vel);
     f.age = 0;
     f.life = life;
@@ -138,6 +139,7 @@ export class ExplosionFx {
   explode(pos: THREE.Vector3, radius: number, camera: THREE.Vector3): void {
     const fireball = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), this.fireballMat.clone());
     fireball.position.copy(pos);
+    fireball.layers.set(2);
     this.scene.add(fireball);
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 48), this.ringMat.clone());
     ring.rotation.x = -Math.PI / 2;

@@ -19,9 +19,12 @@ export const VEHICLES: VehicleInfo[] = [
   { id: 'race5', kind: 'quad', name: 'Racer 5"', description: '6S, 470 g, Schub/Gewicht 12:1 – extrem direkt, sehr schnell' },
   { id: 'longrange7', kind: 'quad', name: 'Long Range 7"', description: '6S Li-Ion, 1050 g – träge, effizient, wenig Punch' },
   { id: 'bomber7', kind: 'quad', name: 'Sprengstoff-Drohne 7"', description: '6S, 1450 g mit Sprengladung – explodiert beim Einschlag (z. B. in ein Auto)' },
+  { id: 'interceptor', kind: 'quad', name: 'Abfangdrohne', description: '6S, 500 g, Schub/Gewicht 13:1 – extrem schnell, kurze Flugzeit, zum Rammen' },
+  { id: 'octo', kind: 'quad', name: 'Schwerlast-Oktokopter', description: '12S, 9 kg mit 3 kg Versorgungskiste – Abwurf mit B / 📦' },
   { id: 'trainer', kind: 'plane', name: 'Trainer (Hochdecker)', description: '1.4 m, Bugfahrwerk – Start von der Piste' },
   { id: 'wing', kind: 'plane', name: 'FPV-Nurflügler', description: '1.0 m, Druckpropeller, Handstart – schnell' },
   { id: 'glider', kind: 'plane', name: 'Segler 2 m', description: 'Elektrosegler, Handstart – Thermik nutzen' },
+  { id: 'recon', kind: 'plane', name: 'Aufklärungsflügel', description: '2.2 m, Li-Ion, lange Flugzeit, Zoom-Kamera bis 8× (Z / 🔍)' },
 ];
 
 export const DEFAULT_VEHICLE = 'freestyle5';

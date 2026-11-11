@@ -16,6 +16,8 @@ export class DroneMesh {
   private readonly motorGroups: THREE.Group[] = [];
   private battery!: THREE.Mesh;
   private camBlock!: THREE.Mesh;
+  /** Versorgungskiste (Oktokopter). */
+  cargo: THREE.Group | null = null;
   /** Motorpositionen (Körper) für Rauch. */
   readonly motorPositions: THREE.Vector3[] = [];
 
@@ -57,6 +59,22 @@ export class DroneMesh {
     lens.rotation.x = Math.PI / 2;
     lens.position.set(0, 0.015 * s, -0.067 * s);
     this.root.add(lens);
+
+    // Versorgungskiste an Seilen unter dem Rahmen
+    if (preset.cargo) {
+      const g = new THREE.Group();
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.4), new THREE.MeshStandardMaterial({ color: 0x4b5320, roughness: 0.9 }));
+      box.position.y = preset.cargo.hangY;
+      box.castShadow = true;
+      g.add(box);
+      for (const [x, z] of [[0.2, 0.15], [-0.2, 0.15], [0.2, -0.15], [-0.2, -0.15]]) {
+        const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, -preset.cargo.hangY, 4), new THREE.MeshBasicMaterial({ color: 0x222222 }));
+        rope.position.set(x * 0.6, preset.cargo.hangY / 2, z * 0.6);
+        g.add(rope);
+      }
+      this.root.add(g);
+      this.cargo = g;
+    }
 
     // Nutzlast (Sprengladung) unter dem Rahmen
     if (vis.payload) {

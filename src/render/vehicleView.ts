@@ -67,6 +67,7 @@ class DroneView extends BaseView implements VehicleView {
     const motors = vehicle.quad.motors;
     for (let i = 0; i < motors.length; i++) this.omegas[i] = motors[i].omega;
     this.mesh.updateProps(this.omegas, dt);
+    if (this.mesh.cargo) this.mesh.cargo.visible = vehicle.cargoAttached;
   }
 }
 

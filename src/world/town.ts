@@ -181,6 +181,7 @@ export function buildTown(scene: THREE.Scene, shadows: boolean): Arena {
     collision,
     sun,
     sunDirection: sunDir,
+    sky,
     spawns: {
       quad: new THREE.Vector3(45, 0.03, -28),
       quadYaw: 0,

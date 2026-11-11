@@ -33,8 +33,8 @@ const run = (sim: Simulation, sticks: { throttle: number; roll: number; pitch: n
   for (let i = 0; i < s / sim.dt; i++) sim.step(sticks);
 };
 
-const TRIM: Record<string, [number, number]> = { trainer: [9, 14], wing: [12, 19], glider: [7.5, 11] };
-const GLIDE: Record<string, number> = { trainer: 6, wing: 4.5, glider: 12 };
+const TRIM: Record<string, [number, number]> = { trainer: [9, 14], wing: [12, 19], glider: [7.5, 11], recon: [9, 15] };
+const GLIDE: Record<string, number> = { trainer: 6, wing: 4.5, glider: 12, recon: 10 };
 
 describe.each(Object.keys(PLANE_PRESETS))('Flugzeug %s', (id) => {
   it('gleitet ohne Motor stabil mit realistischer Trimmgeschwindigkeit und Gleitzahl', () => {

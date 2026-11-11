@@ -17,6 +17,12 @@ import { buildTown } from './world/town';
 import { DebrisSystem, SmokeSystem } from './render/effects';
 import { ExplosionFx, FireSystem } from './render/explosion';
 import { SignalLostOverlay } from './ui/signalLost';
+import { MilitaryGame } from './game/missions';
+import { StickDelay } from './game/radio';
+import { LAYER_HOT, MilitaryView, setLayer } from './render/military';
+import { ThermalRenderer } from './render/thermal';
+import { MissionHud } from './ui/missionHud';
+import { townMilitaryLayout } from './world/military';
 
 let settings: Settings = loadSettings();
 // Tablets: beim ersten Start mittlere Grafikqualität (Akku/Wärme)
@@ -47,13 +53,41 @@ const camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerH
 const env = new WorldEnvironment(arena.collision, settings.environment, arena.collision.windObstacles());
 const sim = new Simulation(env, settings);
 let view: VehicleView = createVehicleView(sim.vehicle);
+setLayer(view.root, LAYER_HOT);
 scene.add(view.root);
 
+// Militärischer Spielteil (nur in der Kleinstadt): Missionen, Störsender, Flugabwehr
+const game =
+  settings.world === 'town'
+    ? new MilitaryGame(townMilitaryLayout(), arena.collision, {
+        message: (t, sev) => osd.message(t, sev),
+        effect: (kind, pos) => {
+          if (kind === 'convoyHit') fx.explode(pos.clone().setY(1.5), 5, camera.position);
+          if (kind === 'enemyDown') {
+            fire.burst(pos, 18, 6, 1.4);
+            smoke.burst(pos, 10, 1.5);
+          }
+          if (kind === 'crateLanded') smoke.burst(pos.clone(), 4, 0.8);
+        },
+      })
+    : null;
+const militaryView = game ? new MilitaryView(scene, game) : null;
+const stickDelay = new StickDelay();
+let zoomIdx = 0;
+
 function spawnPoint(): THREE.Vector3 {
+  const m = game?.spawn();
+  if (m) return m.position;
   return sim.vehicle.kind === 'plane' ? arena.spawns.plane : arena.spawns.quad;
 }
 function spawnYaw(): number {
+  const m = game?.spawn();
+  if (m) return m.yaw;
   return sim.vehicle.kind === 'plane' ? arena.spawns.planeYaw : arena.spawns.quadYaw;
+}
+if (game) {
+  game.mode = settings.mode;
+  game.threatsInFree = settings.threats === 'on';
 }
 sim.reset(spawnPoint(), spawnYaw());
 
@@ -73,6 +107,7 @@ const windHere = new THREE.Vector3();
 function rebuildView(): void {
   scene.remove(view.root);
   view = createVehicleView(sim.vehicle);
+  setLayer(view.root, LAYER_HOT);
   scene.add(view.root);
   debris.clear();
   smoke.clear();
@@ -110,6 +145,8 @@ const ui = document.getElementById('ui')!;
 const osd = new Osd(ui);
 const telemetry = new TelemetryPanel(ui);
 const signalLost = new SignalLostOverlay(ui);
+const missionHud = new MissionHud(ui);
+const thermal = new ThermalRenderer(renderer, arena.sky ?? null);
 const help = document.getElementById('help')!;
 help.addEventListener('pointerdown', (e) => {
   e.preventDefault();
@@ -119,6 +156,21 @@ if (isTouchDevice()) document.body.classList.add('is-touch');
 const touch = new TouchControls(ui, settings);
 input.touch = touch;
 let paused = false;
+let modeDirty = false;
+
+/** Modus/Mission anwenden: ggf. vorgegebenes Fluggerät, Startpunkt, Missionszustand. */
+function applyMode(): void {
+  if (!game) return;
+  game.mode = settings.mode;
+  game.threatsInFree = settings.threats === 'on';
+  const req = game.requiredVehicle();
+  if (req && sim.vehicle.id !== req) {
+    settings.vehicle = req;
+    saveSettings(settings);
+    sim.setVehicle(req, settings);
+  }
+  resetDrone();
+}
 
 const menu = new SettingsMenu(
   ui,
@@ -126,6 +178,7 @@ const menu = new SettingsMenu(
   (s) => {
     const vehicleChanged = s.vehicle !== settings.vehicle;
     const worldChanged = s.world !== settings.world;
+    if (s.mode !== settings.mode || s.threats !== settings.threats) modeDirty = true;
     settings = s;
     saveSettings(settings);
     if (worldChanged) {
@@ -149,6 +202,10 @@ function openMenu(): void {
 function closeMenu(): void {
   paused = false;
   menu.hide();
+  if (modeDirty) {
+    modeDirty = false;
+    applyMode();
+  }
 }
 
 function resetDrone(): void {
@@ -156,12 +213,21 @@ function resetDrone(): void {
   rebuildView();
   chaseRig.reset();
   input.resetKeyboardThrottle();
+  stickDelay.reset();
+  zoomIdx = 0;
+  if (game) {
+    game.reset(spawnPoint());
+    militaryView?.syncEnemies();
+  }
 }
 
 function updateCameraProjection(): void {
   const aspect = window.innerWidth / window.innerHeight;
   camera.aspect = aspect;
-  camera.fov = settings.camera.view === 'fpv' ? horizontalToVerticalFov(settings.camera.fov, aspect) : 70;
+  const zoom = sim.vehicle.zoomLevels[zoomIdx] ?? 1;
+  const base = settings.camera.view === 'fpv' ? horizontalToVerticalFov(settings.camera.fov, aspect) : 70;
+  // Zoom verkleinert das Sichtfeld (Brennweite ×zoom)
+  camera.fov = (2 * Math.atan(Math.tan((base * Math.PI) / 360) / zoom) * 180) / Math.PI;
   camera.updateProjectionMatrix();
 }
 
@@ -211,13 +277,35 @@ function frame(now: number): void {
     saveSettings(settings);
     chaseRig.reset();
   }
+  if (a.zoom) zoomIdx = (zoomIdx + 1) % sim.vehicle.zoomLevels.length;
+  if (a.thermal) {
+    thermal.enabled = !thermal.enabled;
+    renderer.domElement.classList.toggle('thermal', thermal.enabled);
+  }
+  if (a.action && !paused) {
+    const drop = sim.vehicle.dropCargo?.();
+    if (drop) game?.addCrate(drop);
+    else if (game && game.mode === 'convoy') {
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      const msg = game.report(camera.position, dir, sim.vehicle.zoomLevels[zoomIdx] ?? 1);
+      if (msg) osd.message(msg, msg.includes('gemeldet') ? 'info' : 'warn');
+    }
+  }
+  touch.setActionButton(sim.vehicle.dropCargo ? '📦' : game?.mode === 'convoy' ? '📡' : null);
 
   if (!paused) {
     accumulator += dt;
     const h = sim.dt;
+    // Funkverbindung: Steuerbefehle kommen verzögert an, bei Verbindungsverlust Failsafe
+    const sticks = game ? stickDelay.process(now / 1000, input.sticks, game.radio.latency, game.radio.lost) : input.sticks;
     while (accumulator >= h) {
-      sim.step(input.sticks);
+      sim.step(sticks);
       accumulator -= h;
+    }
+    if (game) {
+      game.update(dt, sim.vehicle);
+      militaryView!.update(dt, camera.position);
     }
   }
 
@@ -247,6 +335,7 @@ function frame(now: number): void {
     env.wind(renderPos, sim.time, windHere);
     smoke.update(dt, view.smokeSources(vehicle, smokeSources), windHere, Math.max(0.6, vehicle.size * 2));
     arena.cars?.update(dt, carFires);
+    militaryView?.fireSources(carFires);
     fire.update(dt, carFires, windHere);
     wreckSmokeSources.length = 0;
     for (const f of carFires) wreckSmokeSources.push(f.clone().setY(f.y + 1.2));
@@ -271,9 +360,13 @@ function frame(now: number): void {
     camera.position.y += (Math.random() - 0.5) * fx.shake * 0.5;
     camera.position.z += (Math.random() - 0.5) * fx.shake * 0.5;
   }
-  // FPV-Video bricht ab, wenn die Drohne zerrissen wurde
-  signalLost.set(settings.camera.view === 'fpv' && vehicle.damage.vaporized);
+  // FPV-Video: Rauschen bei schwachem Signal, Abbruch bei Verbindungsverlust oder Zerstörung
+  const fpv = settings.camera.view === 'fpv';
+  const radioNoise = game ? game.radio.noise : 0;
+  const lostVideo = vehicle.damage.vaporized || (game?.radio.lost ?? false);
+  signalLost.set(fpv ? radioNoise : 0, fpv && lostVideo, vehicle.damage.vaporized ? 'Reset: R / ↺' : 'Failsafe – Verbindung wird gesucht …');
   signalLost.update();
+  renderer.domElement.style.transform = fpv && radioNoise > 0.4 && !lostVideo ? `translateX(${((Math.random() - 0.5) * radioNoise * 10).toFixed(1)}px)` : '';
 
   if (!paused) {
     particles.update(env, sim.time, camera.position, dt);
@@ -287,8 +380,12 @@ function frame(now: number): void {
   osd.update(sim, input.sticks.throttle, dt);
   const info = input.source === 'keyboard' ? 'Tastatur' : `${input.source === 'rc' ? 'RC-Sender' : 'Gamepad'}: ${input.gamepadName}`;
   telemetry.update(sim, input.sticks, info, dt);
+  if (game) {
+    const f = new THREE.Vector3(0, 0, -1).applyQuaternion(renderQuat);
+    missionHud.update(dt, game, renderPos, Math.atan2(-f.x, -f.z), sim.vehicle.zoomLevels[zoomIdx] ?? 1, thermal.enabled);
+  }
 
-  renderer.render(scene, camera);
+  thermal.render(scene, camera);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -296,3 +393,8 @@ requestAnimationFrame(frame);
 // Für Konsolen-Tuning
 (window as unknown as Record<string, unknown>).sim = sim;
 (window as unknown as Record<string, unknown>).arena = arena;
+(window as unknown as Record<string, unknown>).game = game;
+if (game) {
+  game.reset(spawnPoint());
+  militaryView?.syncEnemies();
+}

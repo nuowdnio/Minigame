@@ -206,6 +206,7 @@ export function buildTestArena(scene: THREE.Scene, shadows: boolean): Arena {
     collision,
     sun,
     sunDirection: sunDir,
+    sky,
     spawns: { quad: new THREE.Vector3(0, 0.012, 0), quadYaw: 0, plane: new THREE.Vector3(RUNWAY_X, 0, 25), planeYaw: 0 },
     windsocks: [new THREE.Vector3(4, 0, 3), new THREE.Vector3(RUNWAY_X + 10, 0, 0)],
   };

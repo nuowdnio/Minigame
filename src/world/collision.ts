@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 
 /** Kennzeichnung einer Form (z. B. welches Auto getroffen wurde). */
 export interface ShapeTag {
-  kind: 'car';
+  kind: 'car' | 'convoy';
   id: number;
 }
 
@@ -69,6 +69,7 @@ export interface SphereShape {
 export type Shape = PrismShape | CylinderShape | SphereShape;
 
 interface Entry {
+  cells: number[];
   shape: Shape;
   aabb: Box;
   /** Zählt als Windhindernis (Gebäude). */
@@ -109,18 +110,44 @@ export class StaticWorld implements CollisionWorld {
   add(shape: Shape, windBlocking = false, tag: ShapeTag | null = null): number {
     const aabb = shapeAabb(shape);
     const idx = this.entries.length;
-    this.entries.push({ shape, aabb, windBlocking, tag, enabled: true });
+    this.entries.push({ shape, aabb, windBlocking, tag, enabled: true, cells: [] });
     this.stamp.push(-1);
+    this.insert(idx);
+    return idx;
+  }
+
+  private insert(idx: number): void {
+    const e = this.entries[idx];
     const c = this.cell;
+    const aabb = e.aabb;
     for (let ix = Math.floor(aabb.min.x / c); ix <= Math.floor(aabb.max.x / c); ix++) {
       for (let iz = Math.floor(aabb.min.z / c); iz <= Math.floor(aabb.max.z / c); iz++) {
         const k = this.key(ix, iz);
         let list = this.grid.get(k);
         if (!list) this.grid.set(k, (list = []));
         list.push(idx);
+        e.cells.push(k);
       }
     }
-    return idx;
+  }
+
+  /** Bewegliches Prisma (z. B. Konvoi-Fahrzeug) versetzen und im Raster neu einsortieren. */
+  move(id: number, cx: number, cz: number, yaw: number): void {
+    const e = this.entries[id];
+    if (!e || e.shape.kind !== 'prism') return;
+    for (const k of e.cells) {
+      const list = this.grid.get(k);
+      if (list) {
+        const i = list.indexOf(id);
+        if (i >= 0) list.splice(i, 1);
+      }
+    }
+    e.cells.length = 0;
+    e.shape.cx = cx;
+    e.shape.cz = cz;
+    e.shape.yaw = yaw;
+    e.aabb = shapeAabb(e.shape);
+    this.insert(id);
   }
 
   /** Form ein-/ausschalten (z. B. zerstörte Objekte). */

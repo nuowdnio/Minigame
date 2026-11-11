@@ -175,6 +175,7 @@ export class SmokeSystem {
     p.life = 2 + Math.random() * 1.5;
     p.size = 0.25 * scale * (0.7 + Math.random() * 0.6);
     p.sprite.position.copy(pos);
+    p.sprite.layers.set(2);
     p.vel.set((Math.random() - 0.5) * 0.4, 0.5 + Math.random() * 0.5, (Math.random() - 0.5) * 0.4);
     this.scene.add(p.sprite);
     this.active.push(p);

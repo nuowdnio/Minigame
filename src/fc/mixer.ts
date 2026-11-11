@@ -14,15 +14,18 @@ export interface MixerRule {
 }
 
 /**
- * Leitet die Mixer-Tabelle aus der Motor-Geometrie ab.
+ * Leitet die Mixer-Tabelle aus der Motor-Geometrie ab (beliebige Motorzahl).
  * - Rollen rechts: linke Motoren mehr Schub
  * - Nase runter: hintere Motoren mehr Schub (Körper-z > 0 ist hinten)
  * - Gieren rechts: Motoren mit CCW-Propeller mehr (deren Reaktionsmoment dreht den Rahmen CW)
  */
 export function buildMixer(motors: MotorLayoutEntry[]): MixerRule[] {
+  // Anteile proportional zum Hebelarm (Quad X: ±1; Okto: kleinere Anteile für achsnahe Motoren)
+  const maxX = Math.max(...motors.map((m) => Math.abs(m.position.x))) || 1;
+  const maxZ = Math.max(...motors.map((m) => Math.abs(m.position.z))) || 1;
   return motors.map((m) => ({
-    roll: -Math.sign(m.position.x),
-    pitch: Math.sign(m.position.z),
+    roll: -m.position.x / maxX + 0,
+    pitch: m.position.z / maxZ + 0,
     yaw: -m.spin,
   }));
 }

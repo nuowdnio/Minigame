@@ -30,8 +30,23 @@ export interface PayloadConfig {
   impactTrigger: number;
 }
 
+/** Abwerfbare Last (Versorgungskiste) unter dem Rahmen. */
+export interface CargoConfig {
+  /** Masse der Last (kg), in frame.mass enthalten. */
+  mass: number;
+  /** Anteil der Last an den Trägheitsmomenten (kg·m²). */
+  inertia: { x: number; y: number; z: number };
+  /** Aufhängepunkt unter dem Schwerpunkt (m). */
+  hangY: number;
+  /** Fallschirm-Widerstandsfläche Cd·A (m²) nach dem Öffnen. */
+  chuteArea: number;
+}
+
 export interface QuadPreset {
   physics: QuadConfig;
+  cargo?: CargoConfig;
+  /** Zoomstufen der Kamera. */
+  zoomLevels?: number[];
   pid: { roll: AxisPid; pitch: AxisPid; yaw: AxisPid };
   tune: QuadTune;
   payload?: PayloadConfig;
@@ -70,6 +85,18 @@ function quadX(armX: number, armZ = armX): MotorLayoutEntry[] {
     { name: 'RL', position: { x: -armX, y: 0, z: armZ }, spin: -1 },
     { name: 'FL', position: { x: -armX, y: 0, z: -armZ }, spin: 1 },
   ];
+}
+
+/** Flacher Oktokopter: 8 Motoren auf einem Kreis, Drehsinn abwechselnd. */
+function octoFlat(radius: number): MotorLayoutEntry[] {
+  return Array.from({ length: 8 }, (_, i) => {
+    const a = ((i + 0.5) / 8) * Math.PI * 2;
+    return {
+      name: `M${i + 1}`,
+      position: { x: Math.sin(a) * radius, y: 0, z: -Math.cos(a) * radius },
+      spin: (i % 2 === 0 ? 1 : -1) as 1 | -1,
+    };
+  });
 }
 
 /** Kontaktkugeln passend zur Rahmengröße. */
@@ -428,9 +455,134 @@ export const QUAD_PRESETS = {
       yaw: { p: 48, i: 80, d: 0, ff: 80 },
     },
     payload: { kind: 'explosive', blastRadius: 7, armTime: 1.5, impactTrigger: 7 },
+    zoomLevels: [1, 2],
     visual: { ducts: false, frameColor: 0x3d4a2a, propColorFront: 0xff2a2a, propColorRear: 0x333333, batteryColor: 0x1b1b1b, size: 0.4, payload: true },
     cameraMount: { x: 0, y: 0.03, z: -0.085 },
     damage: { propChip: 2.2, propBreak: 5, armBreak: 9, frameBreak: 15 },
+  },
+  interceptor: {
+    physics: derive((c) => {
+      // Abfangdrohne: leicht, stromlinienförmige Haube, sehr steile Propeller, kleiner Akku
+      c.frame.mass = 0.5;
+      c.frame.inertia = { x: 0.0011, y: 0.002, z: 0.0009 };
+      c.frame.motors = quadX(0.07, 0.085);
+      c.frame.contactPoints = [...contacts(0.07, 0.085, 0.017, 0.04), { position: { x: 0, y: 0.01, z: -0.11 }, radius: 0.03, part: 'body' }];
+      Object.assign(c.motor, {
+        kv: 2150,
+        maxThrust: 16,
+        rotorInertia: 4e-6,
+        windingResistance: 0.055,
+        escCurrentLimit: 65,
+        propPitch: 0.135,
+        zeroThrustSpeedFactor: 1.35,
+        translationalLift: 0.1,
+      });
+      Object.assign(c.battery, { capacityMah: 850, internalResistance: 0.024, heatCapacity: 130 });
+      Object.assign(c.aero, {
+        linearDrag: { x: 0.008, y: 0.012, z: 0.006 },
+        dragArea: { x: 0.0055, y: 0.014, z: 0.0035 },
+        rotorDrag: 0.022,
+        angularDrag: 0.0003,
+      });
+    }),
+    tune: {
+      rates: {
+        roll: { rcRate: 1.3, superRate: 0.75, expo: 0.1 },
+        pitch: { rcRate: 1.3, superRate: 0.75, expo: 0.1 },
+        yaw: { rcRate: 1.15, superRate: 0.65, expo: 0.1 },
+        throttleMid: 0.5,
+        throttleExpo: 0,
+      },
+      tpaRate: 0.65, tpaBreakpoint: 0.35, thrustLinear: 0, vbatSagComp: 1.0,
+      gyroLowpassHz: 320, dtermLowpassHz: 120, feedforwardLowpassHz: 70,
+    },
+    pid: {
+      roll: { p: 52, i: 85, d: 30, ff: 185 },
+      pitch: { p: 54, i: 88, d: 33, ff: 190 },
+      yaw: { p: 55, i: 85, d: 0, ff: 150 },
+    },
+    zoomLevels: [1, 2],
+    visual: { ducts: false, frameColor: 0x2f3a2f, propColorFront: 0xff6d00, propColorRear: 0x263238, batteryColor: 0x37474f, size: 0.25 },
+    cameraMount: { x: 0, y: 0.02, z: -0.09 },
+    damage: { propChip: 2.5, propBreak: 6, armBreak: 12, frameBreak: 20 },
+  },
+
+  octo: {
+    physics: derive((c) => {
+      // Schwerlast-Oktokopter (15"-Propeller, 12S) mit 3 kg Versorgungskiste
+      c.frame.mass = 9.0;
+      c.frame.inertia = { x: 0.62, y: 1.05, z: 0.6 };
+      c.frame.motors = octoFlat(0.48);
+      c.frame.contactPoints = [
+        ...octoFlat(0.48).map((m) => ({ position: { ...m.position, y: -0.02 }, radius: 0.04 })),
+        { position: { x: 0.25, y: -0.32, z: 0.25 }, radius: 0.04, part: 'gear' },
+        { position: { x: -0.25, y: -0.32, z: 0.25 }, radius: 0.04, part: 'gear' },
+        { position: { x: 0.25, y: -0.32, z: -0.25 }, radius: 0.04, part: 'gear' },
+        { position: { x: -0.25, y: -0.32, z: -0.25 }, radius: 0.04, part: 'gear' },
+        { position: { x: 0, y: 0.12, z: 0 }, radius: 0.12, part: 'body' },
+      ];
+      Object.assign(c.motor, {
+        kv: 400,
+        maxThrust: 52,
+        torqueToThrust: 0.03,
+        idle: 0.05,
+        rotorInertia: 2.2e-4,
+        windingResistance: 0.09,
+        noLoadCurrent: 0.9,
+        escCurrentLimit: 60,
+        motorHeatCapacity: 150,
+        motorCooling: 1.2,
+        motorCoolingPerKrads: 3,
+        motorMaxTemp: 170,
+        escHeatCapacity: 8,
+        escResistance: 0.004,
+        escCooling: 0.8,
+        escMaxTemp: 130,
+        propDiameter: 0.38,
+        propPitch: 0.14,
+        zeroThrustSpeedFactor: 1.3,
+        translationalLift: 0.15,
+      });
+      Object.assign(c.battery, {
+        cells: 12,
+        capacityMah: 16000,
+        internalResistance: 0.035,
+        polarizationResistance: 0.015,
+        polarizationTau: 8,
+        idleCurrent: 1.5,
+        heatCapacity: 2600,
+        coolingStill: 1.5,
+        coolingPerSpeed: 0.2,
+      });
+      Object.assign(c.aero, {
+        linearDrag: { x: 0.15, y: 0.25, z: 0.15 },
+        dragArea: { x: 0.09, y: 0.3, z: 0.09 },
+        rotorDrag: 0.12,
+        angularDrag: 0.04,
+      });
+      c.gyro.noise = 0.1;
+    }),
+    cargo: { mass: 3.0, inertia: { x: 0.19, y: 0.02, z: 0.19 }, hangY: -0.25, chuteArea: 1.4 },
+    tune: {
+      rates: {
+        roll: { rcRate: 0.6, superRate: 0.3, expo: 0.4 },
+        pitch: { rcRate: 0.6, superRate: 0.3, expo: 0.4 },
+        yaw: { rcRate: 0.6, superRate: 0.2, expo: 0.3 },
+        throttleMid: 0.45,
+        throttleExpo: 0.3,
+      },
+      tpaRate: 0, tpaBreakpoint: 0.5, thrustLinear: 0.2, vbatSagComp: 1.0,
+      gyroLowpassHz: 100, dtermLowpassHz: 50, feedforwardLowpassHz: 10,
+    },
+    pid: {
+      roll: { p: 38, i: 70, d: 45, ff: 30 },
+      pitch: { p: 38, i: 70, d: 45, ff: 30 },
+      yaw: { p: 50, i: 80, d: 0, ff: 40 },
+    },
+    zoomLevels: [1, 2, 4],
+    visual: { ducts: false, frameColor: 0x3b4a3a, propColorFront: 0xff8f00, propColorRear: 0x212121, batteryColor: 0x263238, size: 1.1 },
+    cameraMount: { x: 0, y: -0.08, z: -0.25 },
+    damage: { propChip: 2, propBreak: 4, armBreak: 6, frameBreak: 9 },
   },
 } satisfies Record<string, QuadPreset>;
 

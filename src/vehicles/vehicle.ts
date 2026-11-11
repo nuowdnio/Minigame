@@ -25,6 +25,12 @@ export interface Vehicle {
   readonly size: number;
   /** Schadenszustand und Ereignisse. */
   readonly damage: DamageState;
+  /** Zoomstufen der Kamera (1 = normal). */
+  readonly zoomLevels: number[];
+  /** Treffer durch Beschuss (Flugabwehr) – beschädigt zufällige Bauteile. */
+  applyHit(): void;
+  /** Last abwerfen (nur Fluggeräte mit Last). */
+  dropCargo?(): CargoDrop | null;
   /** Optionaler Hinweis fürs OSD (z. B. Handstart). */
   readonly statusHint?: string;
   /** Auf Startposition setzen. */
@@ -36,6 +42,14 @@ export interface Vehicle {
 }
 
 export const RAD2DEG = 180 / Math.PI;
+
+/** Abgeworfene Last: Startzustand für die Kistenphysik. */
+export interface CargoDrop {
+  position: Vector3;
+  velocity: Vector3;
+  mass: number;
+  chuteArea: number;
+}
 
 /** Gyro-Raten in FC-Achsen aus der Körper-Winkelgeschwindigkeit (deg/s). */
 export function bodyRatesToFc(w: Vector3, out: { roll: number; pitch: number; yaw: number }) {
