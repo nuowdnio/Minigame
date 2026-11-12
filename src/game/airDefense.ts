@@ -48,11 +48,14 @@ export class AirDefenseSite {
   private readonly lastPos = new Vector3();
   private hasLast = false;
   private trackError = 0;
+  /** Wie lange das Ziel schon ununterbrochen verfolgt wird (s) – die ersten Feuerstöße streuen stark. */
+  trackTime = 0;
+  private lostTime = 0;
   disabled = false;
 
   constructor(
     readonly position: Vector3,
-    readonly range = 320,
+    readonly range = 260,
     readonly muzzleSpeed = 480,
     readonly slewRate = 1.4, // rad/s
     readonly fireRate = 9, // Schuss/s
@@ -73,6 +76,8 @@ export class AirDefenseSite {
     this.disabled = false;
     this.estVel.set(0, 0, 0);
     this.hasLast = false;
+    this.trackTime = 0;
+    this.lostTime = 0;
   }
 
   /**
@@ -104,7 +109,16 @@ export class AirDefenseSite {
       // Zielfehler wächst mit der Winkelgeschwindigkeit des Ziels (schwer zu verfolgen)
       const crossing = _d.copy(drone.velocity).sub(_aim.subVectors(drone.position, this.muzzle).normalize().multiplyScalar(drone.velocity.dot(_aim))).length();
       this.trackError = 0.08 * (crossing / Math.max(10, dist));
-      if (this.observer.detected && this.los && dist < this.range) {
+      const engaged = this.observer.detected && this.los && dist < this.range;
+      // Einschießen: Verfolgungszeit wächst nur bei Sicht, nach 2 s ohne Sicht beginnt es von vorn
+      if (engaged) {
+        this.trackTime += dt;
+        this.lostTime = 0;
+      } else {
+        this.lostTime += dt;
+        if (this.lostTime > 2) this.trackTime = 0;
+      }
+      if (engaged) {
         // Vorhalt (zwei Iterationen) inkl. Geschossabfall
         let t = dist / this.muzzleSpeed;
         for (let k = 0; k < 2; k++) {
@@ -157,7 +171,9 @@ export class AirDefenseSite {
 
   private fire(): void {
     const dir = this.barrel.clone();
-    const sp = this.spread + this.trackError;
+    // Streuung: anfangs grob (Einschießen), nach einigen Sekunden Verfolgung präzise
+    const ranging = 1 + 5 * Math.exp(-this.trackTime / 2.5);
+    const sp = this.spread * ranging + this.trackError;
     dir.x += (Math.random() - 0.5) * 2 * sp;
     dir.y += (Math.random() - 0.5) * 2 * sp;
     dir.z += (Math.random() - 0.5) * 2 * sp;

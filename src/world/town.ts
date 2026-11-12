@@ -94,10 +94,11 @@ export function buildTown(scene: THREE.Scene, shadows: boolean): Arena {
   signPost(b, scene, 196, 8, 'FLUGDORF');
 
   // Laternen und Alleebäume entlang Hauptstraße und Querstraße z = 0
+  // (jede Laterne einzeln prüfen – sonst steht eine mitten auf der Kreuzung)
+  const onCrossing = (z: number) => STREETS_Z.some((sz) => Math.abs(sz - z) < 10);
   for (let z = zMin + 15; z < zMax; z += 30) {
-    if (STREETS_Z.some((sz) => Math.abs(sz - z) < 10)) continue;
-    b.lamp(-ROAD_W / 2 - 0.6, z, Math.PI);
-    b.lamp(ROAD_W / 2 + 0.6, z + 15, 0);
+    if (!onCrossing(z)) b.lamp(-ROAD_W / 2 - 0.6, z, Math.PI);
+    if (!onCrossing(z + 15)) b.lamp(ROAD_W / 2 + 0.6, z + 15, 0);
   }
   for (let x = xMin + 15; x < 460; x += 32) {
     if (STREETS_X.some((sx) => Math.abs(sx - x) < 10)) continue;

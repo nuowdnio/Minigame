@@ -79,8 +79,11 @@ export class Osd {
     div.textContent = text;
     box.prepend(div);
     while (box.children.length > 5) box.lastChild!.remove();
-    setTimeout(() => div.classList.add('fade'), severity === 'critical' ? 6000 : 4000);
-    setTimeout(() => div.remove(), severity === 'critical' ? 7000 : 5000);
+    // lange Texte (Missions-Briefing) bleiben entsprechend länger stehen
+    const show = (severity === 'critical' ? 6000 : 4000) + Math.max(0, text.length - 60) * 55;
+    div.classList.toggle('long', text.length > 90);
+    setTimeout(() => div.classList.add('fade'), show);
+    setTimeout(() => div.remove(), show + 1000);
   }
 
   setLap(text: string): void {

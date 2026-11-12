@@ -31,6 +31,8 @@ export interface Vehicle {
   applyHit(): void;
   /** Last abwerfen (nur Fluggeräte mit Last). */
   dropCargo?(): CargoDrop | null;
+  /** Hängt gerade eine Last am Fluggerät? */
+  readonly cargoAttached?: boolean;
   /** Optionaler Hinweis fürs OSD (z. B. Handstart). */
   readonly statusHint?: string;
   /** Auf Startposition setzen. */

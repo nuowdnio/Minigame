@@ -35,6 +35,7 @@ export class MissionHud {
       lines.push(`ENTD ${bar(a)}${g.air.some((s) => s.observer.detected) ? ' !' : ''}`);
     }
     if (zoom > 1) lines.push(`ZOOM ${zoom}×`);
+    if (g.swapProgress > 0) lines.push(`AKKUWECHSEL ${bar(g.swapProgress)}`);
     if (thermal) lines.push('WÄRMEBILD');
     this.link.textContent = lines.join('\n');
     this.link.classList.toggle('warn', g.radio.quality < 0.4);
@@ -47,7 +48,8 @@ export class MissionHud {
       const rep = c.hazards.filter((h) => h.reported).length;
       const next = c.nextHazard();
       o = `KONVOI ${pct}% · GEMELDET ${rep}/${c.hazards.length}`;
-      if (!c.started) o += ' · START IN KÜRZE';
+      if (!c.started) o += ` · ABFAHRT IN ${Math.max(0, Math.ceil(g.convoyStartTimer))} S`;
+      else if (c.vehicles[0].damaged) o += ' · KONVOI GETROFFEN';
       else if (next && !next.reported) o += ` · GEFAHR VORAUS ${Math.round(next.s - c.leadS)} M`;
     } else if (g.mode === 'intercept') {
       o = `AUFKLÄRER ${g.kills}/${g.enemies.length} · ${Math.max(0, Math.round(330 - g.time))} S`;

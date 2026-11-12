@@ -99,8 +99,13 @@ export class QuadVehicle implements Vehicle {
     return this.preset.zoomLevels ?? [1, 2];
   }
 
-  /** Masse und Trägheit inkl. angehängter Last wiederherstellen. */
-  private restoreCargo(): void {
+  /** Hat das Modell eine Lastaufnahme (Oktokopter)? */
+  get hasCargoBay(): boolean {
+    return !!this.preset.cargo;
+  }
+
+  /** Masse und Trägheit inkl. angehängter Last wiederherstellen (neue Kiste einhängen). */
+  restoreCargo(): void {
     const f = this.preset.physics.frame;
     const b = this.quad.body;
     b.mass = f.mass;

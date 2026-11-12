@@ -17,7 +17,7 @@ import { buildTown } from './world/town';
 import { DebrisSystem, SmokeSystem } from './render/effects';
 import { ExplosionFx, FireSystem } from './render/explosion';
 import { SignalLostOverlay } from './ui/signalLost';
-import { MilitaryGame } from './game/missions';
+import { MISSIONS, MilitaryGame } from './game/missions';
 import { StickDelay } from './game/radio';
 import { LAYER_HOT, MilitaryView, setLayer } from './render/military';
 import { ThermalRenderer } from './render/thermal';
@@ -50,6 +50,12 @@ const arena = settings.world === 'testfield' ? buildTestArena(scene, true) : bui
 const camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.08, 5000);
 
 // --- Simulation -------------------------------------------------------------
+// Mission mit vorgegebenem Fluggerät (z. B. Abfangjagd) auch direkt beim Start berücksichtigen
+const missionVehicle = settings.world === 'town' ? MISSIONS.find((m) => m.id === settings.mode)?.vehicle : null;
+if (missionVehicle && settings.vehicle !== missionVehicle) {
+  settings.vehicle = missionVehicle;
+  saveSettings(settings);
+}
 const env = new WorldEnvironment(arena.collision, settings.environment, arena.collision.windObstacles());
 const sim = new Simulation(env, settings);
 let view: VehicleView = createVehicleView(sim.vehicle);
@@ -120,10 +126,8 @@ function rebuildView(): void {
 /** Fluggerät wechseln: Physik und Modell neu aufbauen. */
 function switchVehicle(id: string): void {
   sim.setVehicle(id, settings);
-  rebuildView();
-  sim.reset(spawnPoint(), spawnYaw());
-  chaseRig.reset();
-  input.resetKeyboardThrottle();
+  // komplett zurücksetzen – auch eine laufende Mission startet mit dem neuen Fluggerät neu
+  resetDrone();
 }
 
 // Wind sichtbar machen
@@ -177,6 +181,8 @@ const menu = new SettingsMenu(
   settings,
   (s) => {
     const vehicleChanged = s.vehicle !== settings.vehicle;
+    // Missionen gibt es nur in der Kleinstadt
+    if (s.mode !== 'free' && s.world !== 'town') s.world = 'town';
     const worldChanged = s.world !== settings.world;
     if (s.mode !== settings.mode || s.threats !== settings.threats) modeDirty = true;
     settings = s;
@@ -282,8 +288,9 @@ function frame(now: number): void {
     thermal.enabled = !thermal.enabled;
     renderer.domElement.classList.toggle('thermal', thermal.enabled);
   }
+  const canDrop = !!sim.vehicle.cargoAttached;
   if (a.action && !paused) {
-    const drop = sim.vehicle.dropCargo?.();
+    const drop = canDrop ? sim.vehicle.dropCargo?.() : null;
     if (drop) game?.addCrate(drop);
     else if (game && game.mode === 'convoy') {
       const dir = new THREE.Vector3();
@@ -292,7 +299,7 @@ function frame(now: number): void {
       if (msg) osd.message(msg, msg.includes('gemeldet') ? 'info' : 'warn');
     }
   }
-  touch.setActionButton(sim.vehicle.dropCargo ? '📦' : game?.mode === 'convoy' ? '📡' : null);
+  touch.setActionButton(canDrop ? '📦' : game?.mode === 'convoy' ? '📡' : null);
 
   if (!paused) {
     accumulator += dt;

@@ -131,16 +131,24 @@ Flugmodi Flugzeug: **Manuell** (Sticks direkt auf die Ruder), **Stabilisiert** (
 Im Menü unter **Modus** wählbar. Alles ist bewusst spielerisch und fiktiv gehalten – keine echten Taktiken
 oder Waffendaten.
 
-- **Konvoi-Begleitung:** Ein Konvoi fährt eine Route durch die Stadt. Vorausfliegen, Gefahren auf der Strecke
-  (Straßensperren, verdächtige Objekte, Fahrzeuge) mit der Kamera anvisieren und **melden** (B / A / 📡).
-  Gemeldete Gefahren werden umfahren bzw. abgewartet, übersehene treffen den Konvoi.
+- **Konvoi-Begleitung:** Ein Konvoi fährt nach 20 s Vorlauf eine Route durch die Stadt. Vorausfliegen, die
+  4 Gefahren auf der Strecke (Straßensperren, verdächtiges Objekt, verdächtiges Fahrzeug) mit der Bildmitte
+  anvisieren und **melden** (B / A / 📡). Gemeldete Gefahren werden geräumt (der Konvoi hält davor),
+  eine übersehene trifft den Konvoi → Mission gescheitert. Flugabwehr und Störsender decken Teile der Route ab;
+  jede Gefahr lässt sich aber aus der Deckung heraus melden.
 - **Abfangjagd:** Mit der Abfangdrohne gegnerische Aufklärungsdrohnen einholen und rammen, bevor sie die Stadt
-  wieder verlassen. Die Gegner weichen aus, sobald sie dich bemerken.
+  wieder verlassen (mindestens 3 von 4). Die Gegner weichen aus, sobald sie dich bemerken. Über dem eigenen
+  Gebiet gibt es keine Flugabwehr und keine Störsender.
+- **Akkuwechsel:** Am Startplatz landen und kurz stillhalten → frischer Akku (Oktokopter: neue Kiste).
+  Wichtig für die Abfangdrohne mit ihrer kurzen Flugzeit (~3 min).
+- Missionen gibt es nur in der Kleinstadt – wer eine Mission im Testgelände wählt, wird automatisch umgeschaltet.
 - **Störsender:** Masten mit blinkendem Licht. In ihrer Nähe rauscht das Video, die Steuerung reagiert
   verzögert, bis die Verbindung abreißt (Failsafe, „KEIN SIGNAL“). Gebäude/Gelände zwischen Störsender und
   Drohne schirmen ab – tief und hinter Deckung fliegen hilft.
 - **Flugabwehr-Stellungen:** schießen nur bei freier Sichtlinie, brauchen Zeit zum Schwenken und schießen
-  in Feuerstößen mit Leuchtspur. Schnelles Queren wird schlechter getroffen als Schweben.
+  in Feuerstößen mit Leuchtspur. Die ersten Feuerstöße streuen stark (Einschießen) – bei der Meldung
+  „Flugabwehr eröffnet das Feuer“ bleibt Zeit, in Deckung zu gehen. Schnelles Queren wird schlechter
+  getroffen als Schweben.
 - **Entdeckung:** Laute, große, hohe und schnelle Fluggeräte werden früher bemerkt (OSD „ENTD“). Tief und
   langsam in Deckung schleichen lohnt sich.
 - **Versorgungsabwurf:** Der Oktokopter trägt eine Kiste; beim Abwurf ändern sich Masse und Schwerpunkt
@@ -224,7 +232,7 @@ src/
   world/    Kollisionswelt (Raster, Prismen, Zylinder, Kugeln), Stadt, Testgelände, Texturen
   game/     Simulation (fester Zeittakt), Speicher, Funk/Störsender, Entdeckung, Flugabwehr, Konvoi, Gegner, Missionen
   ui/       OSD, Einstellungsmenü, Telemetrie
-tests/      physics/, fc/, game/
+tests/      physics/, fc/, game/ (inkl. automatischer Missions-Durchläufe in der echten Stadt)
 ```
 
 ## Meilensteine

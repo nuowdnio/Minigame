@@ -93,6 +93,7 @@ body.is-touch .telemetry { top: 22%; }
 .osd-msg.warn { color: #ffd54f; }
 .osd-msg.critical { color: #ff5252; font-size: 0.9em; }
 .osd-msg.fade { opacity: 0; }
+.osd-msg.long { white-space: normal; max-width: min(80vw, 760px); text-align: center; line-height: 1.35; padding: 6px 12px; background: rgba(0,0,0,0.55); }
 
 /* Kein Signal (FPV-Video) */
 .signal-lost { position: absolute; inset: 0; z-index: 4; pointer-events: none; }

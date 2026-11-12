@@ -109,7 +109,7 @@ export class SettingsMenu {
             <option value="convoy" ${s.mode === 'convoy' ? 'selected' : ''}>Mission: Konvoi-Begleitung</option>
             <option value="intercept" ${s.mode === 'intercept' ? 'selected' : ''}>Mission: Abfangjagd (Abfangdrohne)</option>
           </select></label>
-          <p class="hint">${s.world === 'town' ? 'Missionen starten beim Schließen des Menüs. Konvoi: Gefahren mit der Kamera anvisieren und melden (M / 📡). Abfangjagd: Aufklärer rammen.' : 'Missionen gibt es nur in der Kleinstadt.'}</p>
+          <p class="hint">Missionen starten beim Schließen des Menüs${s.world === 'town' ? '' : ' (dafür wird in die Kleinstadt gewechselt)'}. Konvoi: Gefahren mit der Bildmitte anvisieren und melden (B / A / 📡). Abfangjagd: Aufklärer rammen, Akkuwechsel durch Landen am Startplatz.</p>
           <label>Gegner im Freiflug <select data-k="threats">
             <option value="off" ${s.threats === 'off' ? 'selected' : ''}>Aus</option>
             <option value="on" ${s.threats === 'on' ? 'selected' : ''}>Störsender und Flugabwehr aktiv</option>

@@ -4,7 +4,7 @@ import type { MilitaryLayout } from '../world/military';
 import { PlaneVehicle } from '../vehicles/planeVehicle';
 import { QuadVehicle } from '../vehicles/quadVehicle';
 import type { CargoDrop, Vehicle } from '../vehicles/vehicle';
-import { AirDefenseSite, type DroneState } from './airDefense';
+import { AirDefenseSite, segmentDistance, type DroneState } from './airDefense';
 import { Convoy, type Hazard } from './convoy';
 import { EnemyDrone } from './enemyDrones';
 import { RadioLink, lineOfSight } from './radio';
@@ -35,20 +35,23 @@ export const MISSIONS: { id: GameMode; name: string; briefing: string; vehicle: 
     id: 'convoy',
     name: 'Konvoi-Begleitung',
     briefing:
-      'Ein Konvoi fährt durch die Stadt zur Flugplatzeinfahrt. Fliege voraus, finde Gefahren auf der Route und melde sie (M / 📡), bevor der Konvoi sie erreicht. Achtung: Störsender und Flugabwehr im Gebiet.',
+      'Ein Konvoi fährt durch die Stadt zur Flugplatzeinfahrt. Fliege voraus, finde die 4 Gefahren auf der Route (Straßensperren, verdächtige Objekte/Fahrzeuge), richte die Bildmitte darauf und melde sie (B / A / 📡), bevor der Konvoi sie erreicht. Achtung: Störsender und Flugabwehr im Gebiet – tief und hinter Häusern fliegen.',
     vehicle: null,
   },
   {
     id: 'intercept',
     name: 'Abfangjagd',
     briefing:
-      'Vier gegnerische Aufklärungsdrohnen fliegen nacheinander ein. Finde sie (Wärmebild V / 🌡 hilft), verfolge sie und ramme sie mit der Abfangdrohne. Mindestens drei müssen abgefangen werden.',
+      'Vier gegnerische Aufklärungsdrohnen fliegen nacheinander ein. Finde sie (rote Markierung, Wärmebild V / 🌡), verfolge sie und ramme sie mit der Abfangdrohne. Mindestens drei müssen abgefangen werden. Akku leer? Am Startplatz landen und stillhalten = Akkuwechsel.',
     vehicle: 'interceptor',
   },
 ];
 
 const _c: ContactResult = { normal: new Vector3(), depth: 0 };
 const _dir = new Vector3();
+const _rel0 = new Vector3();
+const _rel1 = new Vector3();
+const _zero = new Vector3();
 
 /** Lautstärke eines Fluggeräts 0..1 (Motorleistung). */
 export function vehicleNoise(v: Vehicle): number {
@@ -82,7 +85,15 @@ export class MilitaryGame {
   readonly crates: Crate[] = [];
   kills = 0;
   escaped = 0;
-  private convoyStartTimer = 0;
+  /** Zeit bis zur Abfahrt des Konvois (s). */
+  convoyStartTimer = 0;
+  /** Bodenstation (Startplatz) – hier wird der Akku gewechselt. */
+  readonly station = new Vector3();
+  /** Fortschritt des Akkuwechsels 0..1 (für das HUD). */
+  swapProgress = 0;
+  private readonly lastPlayer = new Vector3();
+  private hasLastPlayer = false;
+  private readonly enemyPrev: Vector3[] = [];
   private announced = new Set<string>();
   private readonly convoyShapes: number[] = [];
   private readonly hazardShapes: number[] = [];
@@ -123,8 +134,10 @@ export class MilitaryGame {
     this.convoy.hazards.forEach((h, i) => this.world.setEnabled(this.hazardShapes[i], on && !h.cleared));
   }
 
+  /** Störsender und Flugabwehr aktiv? (Konvoi-Mission oder Freiflug mit Gegnern; die Abfangjagd
+   *  findet über dem eigenen Gebiet statt.) */
   get threatsActive(): boolean {
-    return this.mode !== 'free' || this.threatsInFree;
+    return this.mode === 'convoy' || (this.mode === 'free' && this.threatsInFree);
   }
 
   /** Startpunkt für die aktuelle Mission (null = Standard der Welt). */
@@ -146,14 +159,19 @@ export class MilitaryGame {
     this.kills = 0;
     this.escaped = 0;
     this.announced.clear();
+    this.station.copy(station);
+    this.swapProgress = 0;
+    this.hasLastPlayer = false;
     this.radio.reset(station.clone().setY(station.y + 1.5));
     this.radio.jammers = this.threatsActive ? this.layout.jammers : [];
     for (const a of this.air) a.reset();
     this.convoy.reset();
-    this.convoyStartTimer = 8;
+    this.convoyStartTimer = 20;
     this.crates.length = 0;
     this.enemies =
-      this.mode === 'intercept' ? this.layout.enemyRoutes.map((r, i) => new EnemyDrone(r, 4 + i * 22)) : [];
+      this.mode === 'intercept' ? this.layout.enemyRoutes.map((r, i) => new EnemyDrone(r, 3 + i * 30)) : [];
+    this.enemyPrev.length = 0;
+    for (const e of this.enemies) this.enemyPrev.push(e.position.clone());
     this.syncShapes();
     const m = MISSIONS.find((x) => x.id === this.mode);
     if (m && m.briefing) this.hooks.message(`${m.name.toUpperCase()}: ${m.briefing}`, 'info');
@@ -187,9 +205,35 @@ export class MilitaryGame {
       if (!this.radio.lost) this.announced.delete('lost');
     }
 
+    this.updateBatterySwap(dt, vehicle);
     this.updateCrates(dt);
     if (this.mode === 'convoy') this.updateConvoy(dt, vehicle);
     if (this.mode === 'intercept') this.updateIntercept(dt, vehicle);
+    this.lastPlayer.copy(pos);
+    this.hasLastPlayer = true;
+  }
+
+  /**
+   * Akkuwechsel am Startplatz: landen und still stehen -> nach 3 s frischer Akku
+   * (beim Oktokopter wird auch eine neue Kiste eingehängt).
+   */
+  private updateBatterySwap(dt: number, vehicle: Vehicle): void {
+    const p = vehicle.body.position;
+    const atBase = Math.hypot(p.x - this.station.x, p.z - this.station.z) < 25 && p.y < this.station.y + 0.6;
+    const still = vehicle.body.velocity.length() < 0.4 && vehicle.body.angularVelocity.length() < 0.5;
+    const b = vehicle.battery;
+    const quad = vehicle instanceof QuadVehicle ? vehicle : null;
+    const needs = b.soc < b.params.startSoc - 0.08 || (quad !== null && quad.hasCargoBay && !quad.cargoAttached);
+    if (!vehicle.damage.destroyed && atBase && still && needs) {
+      if (this.swapProgress === 0) this.hooks.message('Am Startplatz – Akkuwechsel …', 'info');
+      this.swapProgress += dt / 3;
+      if (this.swapProgress >= 1) {
+        this.swapProgress = 0;
+        b.reset(b.temperatureC);
+        quad?.restoreCargo();
+        this.hooks.message(quad?.hasCargoBay ? 'Akku gewechselt, neue Kiste eingehängt' : 'Akku gewechselt', 'info');
+      }
+    } else this.swapProgress = 0;
   }
 
   private finish(status: MissionStatus, text: string): void {
@@ -235,8 +279,8 @@ export class MilitaryGame {
   report(camPos: Vector3, camDir: Vector3, zoom: number): string {
     if (this.mode !== 'convoy') return '';
     if (this.radio.lost) return 'Keine Verbindung – Meldung nicht möglich';
-    const maxDist = 130 * Math.sqrt(zoom);
-    const maxAngle = (16 / zoom + 2) * (Math.PI / 180);
+    const maxDist = 150 * Math.sqrt(zoom);
+    const maxAngle = (20 / zoom + 3) * (Math.PI / 180);
     let best: Hazard | null = null;
     let bestAngle = Infinity;
     for (const h of this.convoy.hazards) {
@@ -262,7 +306,10 @@ export class MilitaryGame {
   private updateIntercept(dt: number, vehicle: Vehicle): void {
     const pos = vehicle.body.position;
     const alive = !vehicle.damage.destroyed;
-    for (const e of this.enemies) {
+    const playerPrev = this.hasLastPlayer ? this.lastPlayer : pos;
+    this.enemies.forEach((e, i) => {
+      const ePrev = this.enemyPrev[i] ?? e.position;
+      ePrev.copy(e.position);
       const wasActive = e.active;
       e.update(dt, alive ? pos : null, vehicle.body.velocity.length(), vehicleNoise(vehicle), vehicle.size);
       if (!wasActive && e.active) this.hooks.message('Neuer Aufklärer im Anflug', 'warn');
@@ -271,8 +318,11 @@ export class MilitaryGame {
         this.escaped++;
         this.hooks.message('Aufklärer entkommen', 'critical');
       }
-      // Rammen
-      if (alive && e.active && e.position.distanceTo(pos) < vehicle.size * 0.5 + 0.7) {
+      // Rammen: nächste Annäherung der Relativbewegung in diesem Zeitschritt (kein Durchtunneln
+      // bei hohen Geschwindigkeiten); Spannweite des Aufklärers ~2.2 m
+      _rel0.subVectors(ePrev, playerPrev);
+      _rel1.subVectors(e.position, pos);
+      if (alive && wasActive && e.active && segmentDistance(_rel0, _rel1, _zero) < vehicle.size * 0.5 + 1.1) {
         const rel = vehicle.body.velocity.clone().sub(e.velocity);
         e.shootDown(rel);
         this.kills++;
@@ -285,7 +335,7 @@ export class MilitaryGame {
           m.imbalance = Math.min(1, m.imbalance + 0.35);
         }
       }
-    }
+    });
     const remaining = this.enemies.filter((e) => e.state === 'waiting' || e.active).length;
     if (this.kills >= 3 && remaining === 0) this.finish('success', `MISSION ERFÜLLT – ${this.kills}/${this.enemies.length} Aufklärer abgefangen`);
     else if (this.escaped >= 2) this.finish('failed', 'MISSION GESCHEITERT – zu viele Aufklärer entkommen');

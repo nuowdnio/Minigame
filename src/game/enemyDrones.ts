@@ -77,7 +77,8 @@ export class EnemyDrone {
         this.state = 'evade';
         this.evadeTime = 3 + Math.random() * 3;
         this.evadeDir = Math.random() < 0.5 ? -1 : 1;
-        this.targetAlt = Math.max(30, Math.min(160, this.position.y + (Math.random() < 0.5 ? -40 : 40)));
+        // nicht unter 55 m (Kirchturm 46 m, Hochhaus 42 m)
+        this.targetAlt = Math.max(55, Math.min(160, this.position.y + (Math.random() < 0.5 ? -30 : 40)));
       }
     }
 
